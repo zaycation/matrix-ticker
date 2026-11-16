@@ -66,6 +66,9 @@ def team_games(league):
         yield {
             "away": teams["away"]["team"]["abbreviation"],
             "home": teams["home"]["team"]["abbreviation"],
+            # team colors as hex strings like "552583"; may be missing
+            "away_colors": [teams["away"]["team"].get("color"), teams["away"]["team"].get("alternateColor")],
+            "home_colors": [teams["home"]["team"].get("color"), teams["home"]["team"].get("alternateColor")],
             "away_score": teams["away"].get("score", ""),
             "home_score": teams["home"].get("score", ""),
             "state": st["state"],

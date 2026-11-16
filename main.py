@@ -10,6 +10,8 @@ For each league: fetch fresh scores -> pack games into <=50-char pages
     python main.py --leagues NFL,NBA --page-buffer 1 --league-gap 4
     python main.py --nba --once -v      # debug: one sport, one pass, then exit
     python main.py --nfl --speed-scale 1.1 --once -v   # try a scale without editing config.json
+    python main.py --style scroll       # full-color scrolling ticker (close NexLinq first)
+    python main.py --style cards        # full-color one-game-per-screen cards (close NexLinq first)
 
 Speed scale: 1.0 = the tuned baseline. Each 0.1 adds/removes 0.1 of scroll time
 per page (1.1 = a bit longer, 0.9 = a bit shorter). Per-sport values and the
@@ -26,7 +28,7 @@ import os
 import sys
 import time
 
-from matrix import scores
+from matrix import render, scores, style
 
 TEXT_MAX = 50
 LIVE, FINAL, UPCOMING, INFO = (0, 255, 80), (170, 170, 170), (255, 255, 255), (80, 160, 255)
@@ -158,6 +160,66 @@ def calibrate(panel):
     print(f"Saved to {CALIB_FILE}. Just run: python main.py")
 
 
+TEAM_COLORS_DEMO = {
+    "LAL": ["552583", "fdb927"], "GSW": ["1d428a", "ffc72c"], "NYK": ["006bb6", "f58426"],
+    "TOR": ["ce1141", "000000"], "PIT": ["000000", "ffb612"], "CIN": ["fb4f14", "000000"],
+    "NE": ["002244", "c60c30"], "DET": ["0076b6", "b0b7bc"], "KC": ["e31837", "ffb81c"],
+    "ATL": ["a71930", "000000"], "SF": ["aa0000", "b3995d"], "SEA": ["002244", "69be28"],
+}
+for _games in DEMO.values():
+    for _g in _games:
+        _g["away_colors"] = TEAM_COLORS_DEMO.get(_g["away"], [])
+        _g["home_colors"] = TEAM_COLORS_DEMO.get(_g["home"], [])
+
+
+# ---------- full-color image styles (scroll / cards) ----------
+
+STATE_ORDER = {"in": 0, "post": 1, "pre": 2}
+
+
+def show_image(panel, buf, args, label=""):
+    if panel:
+        ok, msg = panel.show_bitmap(buf)
+        if not ok:
+            raise SystemExit(f"Image upload failed: {msg}\n"
+                             "The scroll and cards styles need NexLinq fully closed.")
+        if args.verbose and label:
+            print(f"shown  {label}", flush=True)
+    else:
+        render.preview(buf)
+
+
+def image_league(panel, league, games, args):
+    games = sorted(games, key=lambda g: STATE_ORDER.get(g["state"], 3))
+    if args.style == "scroll":
+        segs = style.league_segments(league, games)
+        for i, g in enumerate(games):
+            if i:
+                segs.append((args.sep, style.WHITE))
+            segs += style.game_segments(g, short_detail)
+        cols = render.strip(segs)
+        if args.verbose:
+            print(f"scroll {league}: {len(cols)} px, {len(games)} games", flush=True)
+        for offset in range(-render.W, len(cols) + 1, args.step):
+            show_image(panel, render.frame(cols, offset), args)
+            time.sleep(args.frame_gap if panel else args.frame_gap + 0.14)
+    else:  # cards
+        title = [(league, style.league_color(games))]
+        show_image(panel, render.centered(title), args, league)
+        time.sleep(args.card_seconds / 2)
+        for g in games:
+            segs = style.game_segments(g, short_detail)
+            cards = [segs]
+            if render.width(segs) > render.W:                  # too wide: score card + status card
+                cards = [style.game_segments(g, short_detail, compact=True)]
+                if g["state"] != "pre" or render.width(cards[0]) <= render.W:
+                    cards.append(style.status_segments(g, short_detail))
+            for c in cards:
+                show_image(panel, render.centered(c), args, "".join(t for t, _ in c))
+                time.sleep(args.card_seconds)
+    time.sleep(args.league_gap)
+
+
 def restore(panel):
     """Put the saved NexLinq layout back (see tools/save_layout.py)."""
     try:
@@ -187,6 +249,12 @@ def main():
                     help="override every sport's scale (1.0 = baseline, 1.1 = a bit longer)")
     ap.add_argument("--once", action="store_true", help="one pass through the leagues, then exit")
     ap.add_argument("--no-restore", action="store_true", help="don't restore layouts/default.json on exit")
+    ap.add_argument("--style", choices=["text", "scroll", "cards"], default="text",
+                    help="text = text widget (default); scroll/cards = full-color images (close NexLinq)")
+    ap.add_argument("--step", type=int, default=4, help="scroll style: pixels moved per frame")
+    ap.add_argument("--frame-gap", type=float, default=0.15,
+                    help="image styles: seconds between frames (the panel needs > 0.05)")
+    ap.add_argument("--card-seconds", type=float, default=4.0, help="cards style: seconds per card")
     for lg in scores.ALL:
         ap.add_argument(f"--{lg.lower()}", dest="only", action="append_const", const=lg,
                         help=f"show only {lg} (combine flags for several)")
@@ -210,6 +278,8 @@ def main():
             print("No calib.json yet: using 15 s per page. Run --calibrate for accurate timing.")
         if panel and not args.verbose:
             print("Ticker running. Ctrl+C to stop. (-v to see each page)")
+        if not panel and args.style != "text":
+            print("\x1b[2J", end="")
 
         while True:
             for league in leagues:
@@ -217,6 +287,10 @@ def main():
                     games = DEMO.get(league, []) if args.demo else scores.games(league)
                 except Exception as e:  # network hiccup: skip this league this cycle
                     print(f"{league}: {e}", file=sys.stderr)
+                    continue
+                if args.style != "text":
+                    if games:
+                        image_league(panel, league, games, args)
                     continue
                 pages = pages_for(league, games, args.sep, args.league_sep)
                 if not args.colors:
