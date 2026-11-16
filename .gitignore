@@ -1,0 +1,15 @@
+# Personal settings and data (never committed)
+calib.json
+config.json
+layouts/
+*.pcapng
+*.pcap
+upload_log.txt
+mydraw.txt
+editor_in.txt
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
