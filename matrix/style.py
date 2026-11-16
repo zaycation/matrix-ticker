@@ -73,7 +73,7 @@ def status_segments(g, short_detail):
     return [(d, WHITE)]          # upcoming start time
 
 
-def game_segments(g, short_detail, compact=False):
+def game_segments(g, short_detail):
     """One game as colored segments: LAL @ GSW 99-87 4TH 2:31"""
     if g.get("tennis"):
         tail = g["detail"] if g["state"] == "pre" else g["sets"]
@@ -82,10 +82,6 @@ def game_segments(g, short_detail, compact=False):
             segs.append((" F", RED))
         return segs
     a, h = team_colors(g)
-    if compact:        # LAL 99 GSW 87  (for narrow cards)
-        segs = [(g["away"], a), (" " + str(g["away_score"]) + " ", WHITE), (g["home"], h),
-                (" " + str(g["home_score"]), WHITE)]
-        return segs if g["state"] != "pre" else [(g["away"], a), (" @ ", GRAY), (g["home"], h)]
     segs = [(g["away"], a), (" @ ", GRAY), (g["home"], h), (" ", WHITE)]
     if g["state"] != "pre":
         segs += [(str(g["away_score"]), WHITE), ("-", GRAY), (str(g["home_score"]), WHITE), (" ", WHITE)]

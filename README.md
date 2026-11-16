@@ -47,24 +47,32 @@ Creator Text widget, `03` payload: `layout 04 00 scroll 02 | text RGB | bg RGB |
 - `tools/analyze.py`: `summary` / `changes` / `diff` on tshark captures (`--addr 3.9.`, `--dir in`)
 - `tools/send_full.py`: replay the old layout-05 sequence with custom text (kept for reference)
 
-## Full-color styles (images)
+## Control window (GUI)
 
-Two image-based styles use the panel's EDITOR (bitmap) path, so every character can have its
-own color: league name red/green/white by game status, gray `:` `@` `-` and game clock, red `F`,
-team abbreviations in team colors. **Close NexLinq fully first** (it fights image uploads).
+```
+pythonw gui.py      # no console window
+```
+
+Sliders (apply live): speed (pixels per second), padding (spaces between games), brightness.
+Checkboxes: sports, loop, verbose log, close NexLinq on Run. Buttons: Run, Stop, Quit NexLinq,
+Launch NexLinq, Quit, Quit + launch NexLinq. Settings are saved to `config.json`. The first time
+NexLinq is closed from here, its location is remembered for Launch (or you're asked once).
+
+## Full-color scroll style
+
+Uses the panel's EDITOR (bitmap) path so every character can have its own color: league name
+red/green/white by game status, gray `:` `@` `-` and game clock, red `F`, team colors.
+**NexLinq must be closed** (it answers image uploads with its own). The GUI does this for you.
 
 ```
 python main.py --style scroll --preview --demo --nba   # see it in the terminal first
-python main.py --style scroll          # one full-color line per league, scrolled frame by frame
-python main.py --style cards           # league title card, then one card per game
+python main.py --style scroll --speed 13 --brightness 80
 ```
-
-Tuning: `--step 4` (pixels per frame, scroll), `--frame-gap 0.15` (the panel needs > 0.05 s
-between frames; ~4 frames/s max), `--card-seconds 4`, `--league-gap 3`.
 
 Image protocol (from the EDITOR capture): `04` begin, `05 ff .. 01` prepare, 49 data packets
 `01 05 00 00 idx 3a 5a 0a` + 56 bytes RGB (900 px, rows of 90 from top-left), `03` EDITOR widget.
-Only 90x10 images display. Every frame needs the full sequence.
+Only 90x10 images display, every frame needs the full sequence, and the panel needs > 0.05 s
+after each frame: about 3.5 frames/s. Faster speeds move more pixels per frame.
 
 ## Restore your NexLinq layout on exit
 
