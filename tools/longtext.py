@@ -44,7 +44,7 @@ def main():
                 time.sleep(gap)
             input(f"\n{name}\n  What scrolls: FIRST and SECOND, only FIRST, only SECOND, or nothing? Enter...")
     finally:
-        path = os.path.join(ROOT, "layouts", "default.json")
+        from matrix.paths import RESTORE_FILE as path
         if os.path.exists(path):
             with open(path) as f:
                 panel.replay([bytes.fromhex(h) for h in json.load(f)["packets"]])

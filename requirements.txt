@@ -1,0 +1,4 @@
+hidapi>=0.14
+tzdata
+pystray>=0.19
+Pillow>=10

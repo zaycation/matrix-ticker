@@ -56,8 +56,10 @@ def main():
         sys.exit("No layout upload found. Start the recording first, then click Sent! in NexLinq.")
 
     last = uploads[-1]
-    os.makedirs(os.path.join(ROOT, "layouts"), exist_ok=True)
-    path = os.path.join(ROOT, "layouts", f"{name}.json")
+    sys.path.insert(0, ROOT)
+    from matrix.paths import LAYOUTS_DIR
+    os.makedirs(LAYOUTS_DIR, exist_ok=True)
+    path = os.path.join(LAYOUTS_DIR, f"{name}.json")
     with open(path, "w") as f:
         json.dump({"packets": [p.hex() for p in last]}, f, indent=1)
     cmds = " ".join(f"{p[1]:02x}" for p in last)

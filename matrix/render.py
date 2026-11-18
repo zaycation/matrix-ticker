@@ -15,6 +15,15 @@ def strip(segments):
     cols = []
     for text, rgb in segments:
         for ch in text:
+            if ch in font.ICONS:                      # multi-colored icon, ignores rgb
+                for icol in font.icon_columns(ch):
+                    col = [BLACK] * H
+                    for y, c in enumerate(icol):
+                        if c:
+                            col[TOP + y] = c
+                    cols.append(col)
+                cols.extend([[BLACK] * H for _ in range(font.GAP)])
+                continue
             for gcol in font.glyph_columns(ch):
                 col = [BLACK] * H
                 for y, on in enumerate(gcol):

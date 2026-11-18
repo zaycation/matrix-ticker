@@ -32,8 +32,23 @@ GLYPHS = {
     ",": [0, 0, 0, 0, 12, 4, 8], "%": [24, 25, 2, 4, 8, 19, 3],
     "*": [0, 4, 21, 14, 21, 4, 0], "=": [0, 0, 31, 0, 31, 0, 0],
     "<": [2, 4, 8, 16, 8, 4, 2], ">": [8, 4, 2, 1, 2, 4, 8],
-    "&": [12, 18, 20, 8, 21, 18, 13],
+    "&": [12, 18, 20, 8, 21, 18, 13], "°": [12, 18, 18, 12, 0, 0, 0],
 }
+
+# 7x7 colored icons, stored under private-use characters so they can sit in text.
+PALETTE = {"y": (255, 200, 0), "w": (220, 220, 220), "b": (60, 140, 255),
+           "c": (190, 225, 255), "g": (140, 140, 140)}
+ICON_ROWS = {
+    "sun":    ["y..y..y", ".y...y.", "..yyy..", "y.yyy.y", "..yyy..", ".y...y.", "y..y..y"],
+    "partly": ["y.y....", ".yyy...", "yyy.ww.", ".y.wwww", "..wwwww", "..wwwww", "......."],
+    "cloud":  [".......", "..www..", ".wwwww.", "wwwwwww", "wwwwwww", ".......", "......."],
+    "rain":   ["..www..", ".wwwww.", "wwwwwww", ".......", ".b.b.b.", "b.b.b..", "......."],
+    "snow":   ["..www..", ".wwwww.", "wwwwwww", ".......", ".c.c.c.", "..c.c..", ".c.c.c."],
+    "storm":  ["..www..", ".wwwww.", "wwwwwww", "...y...", "..yy...", "...y...", "..y...."],
+    "fog":    [".......", "ggggggg", ".......", ".gggggg", ".......", "ggggg..", "......."],
+}
+ICON_CHAR = {name: chr(0xE000 + i) for i, name in enumerate(ICON_ROWS)}
+ICONS = {ICON_CHAR[name]: rows for name, rows in ICON_ROWS.items()}
 SPACE_WIDTH = 3
 GAP = 1        # blank columns between characters
 HEIGHT = 7
@@ -49,5 +64,12 @@ def glyph_columns(ch):
     return [[bool(r & (16 >> c)) for r in rows] for c in range(lo, hi + 1)]
 
 
+def icon_columns(ch):
+    """Columns of RGB-or-None for a colored icon character."""
+    rows = ICONS[ch]
+    return [[PALETTE.get(r[c]) for r in rows] for c in range(len(rows[0]))]
+
+
 def text_width(text):
-    return sum(len(glyph_columns(ch)) + GAP for ch in text) - (GAP if text else 0)
+    return sum((len(icon_columns(ch)) if ch in ICONS else len(glyph_columns(ch))) + GAP
+               for ch in text) - (GAP if text else 0)

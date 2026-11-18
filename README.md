@@ -47,11 +47,30 @@ Creator Text widget, `03` payload: `layout 04 00 scroll 02 | text RGB | bg RGB |
 - `tools/analyze.py`: `summary` / `changes` / `diff` on tshark captures (`--addr 3.9.`, `--dir in`)
 - `tools/send_full.py`: replay the old layout-05 sequence with custom text (kept for reference)
 
+## Install (Windows)
+
+1. Download **MatrixTicker-Setup-x.y.z.exe** from the
+   [latest release](https://github.com/zaycation/matrix-ticker/releases/latest).
+2. Run it and click through the installer. It can add a desktop icon and start Matrix Ticker
+   with Windows (hidden in the system tray). No admin rights or Python needed.
+3. Open Matrix Ticker, pick your sports, type a weather location, and press **Run**.
+
+Settings live in `%APPDATA%\MatrixTicker`. Uninstall from Windows Settings > Apps.
+The ticker needs NexLinq closed while it runs; the app does that for you (and can relaunch it).
+
 ## Control window (GUI)
 
 ```
-pythonw gui.py      # no console window
+pythonw gui.py          # from source (pip install -r requirements.txt)
+pythonw gui.py --tray   # start hidden in the system tray
 ```
+
+Closing the window keeps the app in the system tray (right-click the icon: Open, Run/Stop,
+Launch NexLinq, Quit). Only one copy runs at a time.
+
+**Weather:** tick WEATHER and type a city or ZIP (e.g. `91367`, `Paris, FR`). It cycles with the
+sports: current conditions plus today and the next 4 days, with icons. Data by
+[Open-Meteo.com](https://open-meteo.com) (free, non-commercial).
 
 Sliders (apply live): speed (pixels per second), padding (spaces between games), brightness.
 Checkboxes: sports, loop, verbose log, close NexLinq on Run. Buttons: Run, Stop, Quit NexLinq,
@@ -104,3 +123,8 @@ Debug one sport: `python main.py --nba --once -v` (add `--speed-scale 1.1` to tr
 - Cycle through layouts saved in NexLinq (replay their captured upload sequences) between tickers.
 - GUI for easy customization.
 - Public release: GitHub repo, setup docs, share with other Matrix case owners.
+
+## Building the installer
+
+Push a tag like `v0.2.0` and GitHub Actions (`.github/workflows/build.yml`) builds the app with
+PyInstaller, packs it with Inno Setup, and attaches `MatrixTicker-Setup-0.2.0.exe` to a release.

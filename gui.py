@@ -1,8 +1,9 @@
 """Matrix Ticker control window. Dark, lightweight (tkinter, built into Python).
 
-    pythonw gui.py        # no console window
-    python gui.py         # with a console (shows errors)
+    pythonw gui.py           # no console window
+    pythonw gui.py --tray    # start hidden in the system tray (used at Windows startup)
 
+Closing the window keeps it running in the system tray (needs pystray + Pillow).
 Settings are saved to config.json under "gui".
 """
 import ctypes
@@ -15,10 +16,15 @@ import tkinter as tk
 from tkinter import filedialog
 
 from matrix import nexlinq, scores
-from matrix.ticker import ScrollTicker, Settings, restore_layout
+from matrix.ticker import ITEMS, WEATHER, ScrollTicker, Settings, restore_layout
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(ROOT, "config.json")
+try:
+    import pystray
+    from matrix.icon import make_image
+except Exception:          # tray is optional when running from source
+    pystray = None
+
+from matrix.paths import CONFIG_FILE
 
 BG, PANEL, FG, MUTED = "#15171c", "#1e2128", "#e6e8eb", "#8b919c"
 TROUGH, SLIDER, ACCENT = "#2a2e37", "#6b8cff", "#3b4252"
@@ -96,11 +102,12 @@ class App:
         self.logq, self._save_job = queue.Queue(), None
 
         saved = load_cfg().get("gui", {})
-        for key in ("speed", "padding", "brightness", "loop"):
+        for key in ("speed", "padding", "brightness", "loop", "location", "units"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
-            self.settings.leagues = [lg for lg in scores.ALL if lg in saved["leagues"]]
+            self.settings.leagues = [lg for lg in ITEMS if lg in saved["leagues"]]
+        self.cmdq, self.tray, self._told_tray, self._closed = queue.Queue(), None, False, False
 
         root.title("Matrix Ticker")
         root.configure(bg=BG)
@@ -133,18 +140,34 @@ class App:
         # sports + options
         box2 = tk.Frame(outer, bg=PANEL, padx=12, pady=8)
         box2.pack(fill="x", pady=(8, 0))
-        tk.Label(box2, text="Sports", bg=PANEL, fg=MUTED, font=FONT).grid(row=0, column=0, sticky="w")
+        tk.Label(box2, text="Show", bg=PANEL, fg=MUTED, font=FONT).grid(row=0, column=0, sticky="w")
         self.league_vars = {}
-        for i, lg in enumerate(scores.ALL):
+        for i, lg in enumerate(ITEMS):
             v = tk.BooleanVar(value=lg in self.settings.leagues)
             self._check(box2, lg, v, self._leagues_changed).grid(row=1 + i // 4, column=i % 4, sticky="w")
             self.league_vars[lg] = v
-        tk.Label(box2, text="Options", bg=PANEL, fg=MUTED, font=FONT).grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Label(box2, text="Weather location", bg=PANEL, fg=MUTED, font=FONT).grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        loc = tk.Frame(box2, bg=PANEL)
+        loc.grid(row=4, column=0, columnspan=4, sticky="w")
+        self.location = tk.StringVar(value=self.settings.location)
+        self.location.trace_add("write", lambda *_: self._location_changed())
+        tk.Entry(loc, textvariable=self.location, width=26, bg=TROUGH, fg=FG, insertbackground=FG,
+                 relief="flat", font=FONT, highlightthickness=1, highlightbackground=TROUGH,
+                 highlightcolor=SLIDER).pack(side="left", ipady=3)
+        self.celsius = tk.BooleanVar(value=self.settings.units == "C")
+        self._check(loc, "°C", self.celsius, self._location_changed).pack(side="left", padx=(8, 0))
+        tk.Label(loc, text="City or ZIP, e.g. 91367", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(
+            side="left", padx=(8, 0))
+        tk.Label(box2, text="Options", bg=PANEL, fg=MUTED, font=FONT).grid(row=5, column=0, sticky="w", pady=(6, 0))
         self.loop = tk.BooleanVar(value=self.settings.loop)
         self.close_nexlinq = tk.BooleanVar(value=saved.get("close_nexlinq", True))
-        self._check(box2, "Loop", self.loop, self._opts_changed).grid(row=4, column=0, sticky="w")
+        self.autorun = tk.BooleanVar(value=saved.get("autorun", False))
+        self._check(box2, "Loop", self.loop, self._opts_changed).grid(row=6, column=0, sticky="w")
         self._check(box2, "Close NexLinq on Run", self.close_nexlinq, self._schedule_save).grid(
-            row=4, column=1, columnspan=3, sticky="w")
+            row=6, column=1, columnspan=3, sticky="w")
+        self._check(box2, "Start the ticker when the app opens", self.autorun, self._schedule_save).grid(
+            row=7, column=0, columnspan=4, sticky="w")
 
         # small buttons
         small = tk.Frame(outer, bg=BG)
@@ -163,10 +186,15 @@ class App:
                               relief="flat", bd=0, highlightthickness=0, padx=8, pady=6,
                               font=("Consolas", 9), state="disabled")
         self.logbox.pack(fill="x", pady=(10, 0))
+        tk.Label(outer, text="Scores: ESPN  ·  Weather data by Open-Meteo.com", bg=BG, fg=MUTED,
+                 font=("Segoe UI", 8)).pack(anchor="e", pady=(4, 0))
 
-        root.protocol("WM_DELETE_WINDOW", self.quit)
+        root.protocol("WM_DELETE_WINDOW", self.hide_or_quit)
         dark_title_bar(root)
+        self._start_tray()
         root.after(200, self._poll)
+        if self.autorun.get():
+            root.after(800, self.toggle_run)
 
     # ---------- widgets ----------
     def _slider(self, parent, row, attr, label, lo, hi, step, cast):
@@ -203,6 +231,11 @@ class App:
         self.settings.leagues = [lg for lg, v in self.league_vars.items() if v.get()]
         self._schedule_save()
 
+    def _location_changed(self):
+        self.settings.location = self.location.get()
+        self.settings.units = "C" if self.celsius.get() else "F"
+        self._schedule_save()
+
     def _opts_changed(self):
         self.settings.loop = self.loop.get()
         self._schedule_save()
@@ -218,7 +251,8 @@ class App:
         cfg = load_cfg()
         s = self.settings
         cfg["gui"] = {"speed": s.speed, "padding": s.padding, "brightness": s.brightness,
-                      "leagues": s.leagues, "loop": s.loop, "close_nexlinq": self.close_nexlinq.get()}
+                      "leagues": s.leagues, "loop": s.loop, "close_nexlinq": self.close_nexlinq.get(),
+                      "location": s.location, "units": s.units, "autorun": self.autorun.get()}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 
@@ -231,6 +265,8 @@ class App:
             v.set(lg in d.leagues)
         self.loop.set(d.loop)
         self.close_nexlinq.set(True)
+        self.autorun.set(False)
+        self.celsius.set(False)
         self._leagues_changed()
         self._opts_changed()
         self.log("Settings reset to defaults.")
@@ -240,6 +276,10 @@ class App:
         self.logq.put(msg)
 
     def _poll(self):
+        while not self.cmdq.empty():
+            self.cmdq.get()()
+            if self._closed:            # a tray "Quit" just closed the window
+                return
         while not self.logq.empty():
             msg = self.logq.get()
             self.logbox.configure(state="normal")
@@ -258,6 +298,11 @@ class App:
         else:
             self.toggle.set_style("▶   Run", GREEN, GREEN_HI)
             self.status.configure(text="● Stopped", fg=MUTED)
+        if self.tray and getattr(self, "_tray_running", None) != running:
+            self._tray_running = running
+            self.tray.icon = make_image(64, running)
+            self.tray.title = "Matrix Ticker: " + ("running" if running else "stopped")
+            self.tray.update_menu()
         self.root.after(200, self._poll)
 
     # ---------- actions ----------
@@ -308,10 +353,54 @@ class App:
             msg = nexlinq.launch_nexlinq(path) if path else "Launch cancelled."
         self.log(msg)
 
+    # ---------- system tray ----------
+    def _start_tray(self):
+        if pystray is None:
+            return
+        def later(fn):          # tray callbacks run on the tray thread; hand them to Tk
+            return lambda *_: self.cmdq.put(fn)
+        running = lambda *_: self.thread is not None and self.thread.is_alive()
+        menu = pystray.Menu(
+            pystray.MenuItem("Open Matrix Ticker", later(self.show), default=True),
+            pystray.MenuItem(lambda item: "Stop ticker" if running() else "Run ticker", later(self.toggle_run)),
+            pystray.MenuItem("Launch NexLinq", later(self.launch_nexlinq)),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Quit", later(self.quit)),
+        )
+        try:
+            self.tray = pystray.Icon("MatrixTicker", make_image(64), "Matrix Ticker: stopped", menu)
+            self.tray.run_detached()
+        except Exception as e:
+            self.tray = None
+            self.log(f"System tray unavailable ({e}); closing the window will quit.")
+
+    def show(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def hide_or_quit(self):
+        if not self.tray:
+            self.quit()
+            return
+        self.root.withdraw()
+        if not self._told_tray:
+            self._told_tray = True
+            try:
+                self.tray.notify("Still running in the system tray. Right-click the icon to quit.", "Matrix Ticker")
+            except Exception:
+                pass
+
     def quit(self):
         self._stop_and_wait()
         if self._save_job:
             self._save()
+        if self.tray:
+            try:
+                self.tray.stop()
+            except Exception:
+                pass
+        self._closed = True
         self.root.destroy()
 
     def quit_and_launch(self):
@@ -320,12 +409,34 @@ class App:
         self.quit()
 
 
+def already_running():
+    """Windows: a named mutex keeps a second copy (e.g. startup + manual launch) from
+    fighting over the panel. Returns True if another copy holds it."""
+    if sys.platform != "win32":
+        return False
+    global _mutex
+    _mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "MatrixTicker.SingleInstance")
+    return ctypes.windll.kernel32.GetLastError() == 183   # ERROR_ALREADY_EXISTS
+
+
 if __name__ == "__main__":
+    if already_running():
+        from tkinter import messagebox
+        r = tk.Tk()
+        r.withdraw()
+        messagebox.showinfo("Matrix Ticker", "Matrix Ticker is already running.\n"
+                            "Look for its icon in the system tray (near the clock).")
+        sys.exit(0)
     if sys.platform == "win32":
         try:  # use our icon on the taskbar instead of Python's
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("zaycation.matrixticker")
         except Exception:
             pass
     root = tk.Tk()
-    App(root)
+    hidden = "--tray" in sys.argv and pystray is not None
+    if hidden:
+        root.withdraw()          # started by Windows at login: stay in the tray
+    app = App(root)
+    if hidden and not app.tray:
+        root.deiconify()         # no tray after all: don't leave an invisible app
     root.mainloop()

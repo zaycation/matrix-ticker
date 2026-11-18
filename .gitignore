@@ -13,3 +13,9 @@ editor_in.txt
 __pycache__/
 *.pyc
 .venv/
+
+# Build output
+build/
+dist/
+*.spec
+packaging/icon.ico

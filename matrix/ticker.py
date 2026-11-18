@@ -10,12 +10,13 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from . import render, scores, style
+from . import render, scores, style, weather
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESTORE_FILE = os.path.join(ROOT, "layouts", "default.json")
+from .paths import RESTORE_FILE
 MIN_GAP = 0.15          # the panel needs > 0.05 s after each frame; 0.15 s is proven
 STATE_ORDER = {"in": 0, "post": 1, "pre": 2}
+WEATHER = "WEATHER"
+ITEMS = list(scores.ALL) + [WEATHER]     # everything the ticker can cycle through
 
 
 @dataclass
@@ -23,7 +24,9 @@ class Settings:
     speed: float = 13.0            # pixels per second (about 10% slower than the first version)
     padding: int = 5               # spaces between games
     brightness: int = 100          # percent
-    leagues: list = field(default_factory=lambda: list(scores.ALL))
+    leagues: list = field(default_factory=lambda: list(ITEMS))
+    location: str = ""             # weather: city, ZIP, "91367, US" or "lat,lon"
+    units: str = "F"               # weather: F or C
     loop: bool = True
     verbose: bool = False
     step: int = 4                  # pixels moved per frame
@@ -80,25 +83,45 @@ class ScrollTicker:
         if not ok:
             raise RuntimeError(f"Image upload failed: {msg}. Is NexLinq still running?")
 
+    def _strip(self, item):
+        """Pixel strip for one cycle item, or None to skip it."""
+        if item == WEATHER:
+            if not self.s.location.strip():
+                if self.s.verbose:
+                    self.log("Weather: no location set, skipping.")
+                return None
+            try:
+                segs = weather.segments(self.s.location, self.s.units)
+            except Exception as e:
+                self.log(f"Weather: {e}")
+                return None
+            cols = render.strip(segs)
+            self.log(f"Weather: {segs[0][0].title()}" + (f", {len(cols)} px" if self.s.verbose else ""))
+            return cols
+        try:
+            games = self.games_source(item)
+        except Exception as e:  # network hiccup: skip this league this cycle
+            self.log(f"{item}: couldn't fetch scores ({e})")
+            return None
+        if not games:
+            if self.s.verbose:
+                self.log(f"{item}: no games today")
+            return None
+        cols = league_strip(item, games, self.s.padding)
+        self.log(f"{item}: {len(games)} game{'s' if len(games) != 1 else ''}"
+                 + (f", {len(cols)} px" if self.s.verbose else ""))
+        return cols
+
     def run(self):
         while not self.stop.is_set():
             shown_any = False
             for league in list(self.s.leagues):
                 if self.stop.is_set():
                     return
-                try:
-                    games = self.games_source(league)
-                except Exception as e:  # network hiccup: skip this league this cycle
-                    self.log(f"{league}: couldn't fetch scores ({e})")
-                    continue
-                if not games:
-                    if self.s.verbose:
-                        self.log(f"{league}: no games today")
+                cols = self._strip(league)
+                if cols is None:
                     continue
                 shown_any = True
-                cols = league_strip(league, games, self.s.padding)
-                self.log(f"{league}: {len(games)} game{'s' if len(games) != 1 else ''}"
-                         + (f", {len(cols)} px" if self.s.verbose else ""))
                 offset, upload = -render.W, 0.14
                 while offset <= len(cols):
                     if self.stop.is_set():
@@ -115,5 +138,5 @@ class ScrollTicker:
             if not self.s.loop:
                 return
             if not shown_any:
-                self.log("No games right now in the selected sports; checking again in 60 s.")
+                self.log("Nothing to show right now in the selected items; checking again in 60 s.")
                 self.stop.wait(60)

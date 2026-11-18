@@ -9,8 +9,7 @@ import os
 import subprocess
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_FILE = os.path.join(ROOT, "config.json")
+from .paths import CONFIG_FILE
 NAME_MATCH = "nexlinq|phanteks"
 NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 

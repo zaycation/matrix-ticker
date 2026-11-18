@@ -30,14 +30,11 @@ import sys
 import time
 
 from matrix import render, scores
-from matrix.ticker import ScrollTicker, Settings
+from matrix.ticker import WEATHER, ScrollTicker, Settings
 
 TEXT_MAX = 50
 LIVE, FINAL, UPCOMING, INFO = (0, 255, 80), (170, 170, 170), (255, 255, 255), (80, 160, 255)
-HERE = os.path.dirname(os.path.abspath(__file__))
-CALIB_FILE = os.path.join(HERE, "calib.json")
-CONFIG_FILE = os.path.join(HERE, "config.json")
-RESTORE_FILE = os.path.join(HERE, "layouts", "default.json")
+from matrix.paths import CALIB_FILE, CONFIG_FILE, RESTORE_FILE
 DEFAULT_CONFIG = {"scale": {"default": 1.0}, "live_bonus": 0.0}
 BASE_SCALE = 4.4   # tuned on the panel: scale 1.0 means 4.4x the calibrated scroll time
 CAL_LONG = "1" + "." * 49      # 50 characters, a single "1" so "when it comes back" is unambiguous
@@ -177,6 +174,7 @@ for _games in DEMO.values():
 def run_scroll(panel, args, leagues):
     settings = Settings(speed=args.speed, step=args.step, brightness=args.brightness,
                         padding=len(args.sep), leagues=leagues, loop=not args.once,
+                        location=args.location, units="C" if args.celsius else "F",
                         verbose=args.verbose, league_gap=args.league_gap)
     source = (lambda lg: DEMO.get(lg, [])) if args.demo else None
     if panel:
@@ -224,6 +222,10 @@ def main():
     for lg in scores.ALL:
         ap.add_argument(f"--{lg.lower()}", dest="only", action="append_const", const=lg,
                         help=f"show only {lg} (combine flags for several)")
+    ap.add_argument("--weather", dest="only", action="append_const", const=WEATHER,
+                    help="include the weather forecast (scroll style; needs --location)")
+    ap.add_argument("--location", default="", help='weather location: city, ZIP, "91367, US" or "lat,lon"')
+    ap.add_argument("--celsius", action="store_true", help="weather in Celsius")
     args = ap.parse_args()
 
     panel = None
@@ -250,6 +252,8 @@ def main():
 
         while True:
             for league in leagues:
+                if league == WEATHER:      # weather needs the full-color scroll style
+                    continue
                 try:
                     games = DEMO.get(league, []) if args.demo else scores.games(league)
                 except Exception as e:  # network hiccup: skip this league this cycle
