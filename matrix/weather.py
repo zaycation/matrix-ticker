@@ -1,7 +1,8 @@
 """Weather from Open-Meteo (free, no API key, non-commercial use; credit: Open-Meteo.com).
 
 Two views: "daily" = now + today and the next 4 days (highs only);
-"hourly" = now + the next 5 hours. Both come from one cached request.
+"hourly" = now + the next 5 hours. Both also show the next sunrise and sunset.
+Everything comes from one cached request.
 
 Location can be a city ("Woodland Hills"), a postal code ("91367"), either with a
 country/state after a comma ("91367, US"), or "lat,lon". It's looked up once and cached.
@@ -80,7 +81,7 @@ def forecast(location, units="F"):
     data = _get(FORECAST_URL, {
         "latitude": lat, "longitude": lon,
         "current": "temperature_2m,weather_code,is_day",
-        "daily": "weather_code,temperature_2m_max,precipitation_probability_max",
+        "daily": "weather_code,temperature_2m_max,precipitation_probability_max,sunrise,sunset",
         "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
         "temperature_unit": "fahrenheit" if units == "F" else "celsius",
         "timezone": "auto", "forecast_days": 5,
@@ -101,6 +102,26 @@ def _hour_label(iso):
     return f"{h % 12 or 12}{'AM' if h < 12 else 'PM'}"
 
 
+def _clock(iso):
+    h, m = int(iso[11:13]), iso[14:16]
+    return f"{h % 12 or 12}:{m}{'AM' if h < 12 else 'PM'}"
+
+
+def _sun_segments(d, gap):
+    """Next sunrise and next sunset (whichever comes first leads), local time."""
+    now = (d.get("current", {}).get("time") or "")[:16]
+    daily = d.get("daily", {})
+    events = []
+    for key in ("sunrise", "sunset"):
+        upcoming = [t for t in daily.get(key) or [] if t and t[:16] > now]
+        if upcoming:
+            events.append((upcoming[0], key))
+    segs = []
+    for t, key in sorted(events):
+        segs += [gap, (font.ICON_CHAR[key], None), (" " + _clock(t), style.WHITE)]
+    return segs
+
+
 def _rain(segs, pct):
     if pct is not None and pct >= 20:
         segs.append((f" {round(pct)}%", RAIN))
@@ -115,6 +136,7 @@ def segments(location, units="F", mode="daily"):
             (font.ICON_CHAR[_icon(cur.get("weather_code"), cur.get("is_day", 1))], None),
             (f" {round(cur.get('temperature_2m', 0))}°", style.WHITE)]
     gap = ("     ", style.WHITE)
+    segs += _sun_segments(d, gap)
     if mode == "hourly":
         h = d.get("hourly", {})
         times = h.get("time", [])

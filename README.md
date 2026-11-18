@@ -69,7 +69,7 @@ Closing the window keeps the app in the system tray (right-click the icon: Open,
 Launch NexLinq, Quit). Only one copy runs at a time.
 
 **Weather:** tick WEATHER and type a city or ZIP (e.g. `91367`, `Paris, FR`). It cycles with the
-sports: current conditions plus today and the next 4 days (highs), or the next 5 hours, with icons. Data by
+sports: current conditions plus today and the next 4 days (highs), or the next 5 hours, plus the next sunrise and sunset, with icons. Data by
 [Open-Meteo.com](https://open-meteo.com) (free, non-commercial).
 
 Sliders (apply live): speed (pixels per second), padding (spaces between games), brightness.
