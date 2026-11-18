@@ -33,7 +33,13 @@ SMALL = {
     "°": [".#.", "#.#", ".#.", "...", "..."], " ": ["..", "..", "..", "..", ".."],
     "+": ["...", ".#.", "###", ".#.", "..."], "'": ["#", "#", ".", ".", "."],
 }
-BIG_ROWS = [int(y * 7 / 10) for y in range(10)]   # stretch 7 rows to 10
+# 3x4 letters for labels that need a gap between two lines (dashboard CPU / GPU)
+TINY = {
+    "C": [".##", "#..", "#..", ".##"], "P": ["##.", "#.#", "##.", "#.."],
+    "U": ["#.#", "#.#", "#.#", "###"], "G": [".##", "#..", "#.#", ".##"],
+    "R": ["##.", "#.#", "##.", "#.#"], "A": [".#.", "#.#", "###", "#.#"],
+    "M": ["#.#", "###", "#.#", "#.#"], " ": ["..", "..", "..", ".."],
+}
 
 
 class Canvas:
@@ -62,6 +68,17 @@ class Canvas:
             x += len(rows[0]) + 1
         return x - 1
 
+    def tiny(self, text, x, y, rgb):
+        """3x4 text at (x, y) = top-left. Returns the x after the text."""
+        for ch in text.upper():
+            rows = TINY.get(ch, TINY[" "])
+            for dy, row in enumerate(rows):
+                for dx, c in enumerate(row):
+                    if c == "#":
+                        self.set(x + dx, y + dy, rgb)
+            x += len(rows[0]) + 1
+        return x - 1
+
     def normal(self, text, x, y, rgb):
         """5x7 ticker font at (x, y) = top-left. Returns the x after the text."""
         for ch in text:
@@ -73,14 +90,16 @@ class Canvas:
             x += len(cols) + font.GAP
         return x - font.GAP
 
-    def big(self, text, x, rgb):
-        """10-px-tall text (digits, ':' and letters), full panel height. Returns end x."""
+    def big(self, text, x, rgb, top=1, height=8):
+        """Tall text (the 5x7 font stretched to `height` rows starting at `top`).
+        Default: rows 1-8, leaving a row of margin above and below. Returns end x."""
+        rows = [int(y * 7 / height) for y in range(height)]
         for ch in text:
             cols = font.glyph_columns(ch)
             for dx, col in enumerate(cols):
-                for y in range(H):
-                    if col[BIG_ROWS[y]]:
-                        self.set(x + dx, y, rgb)
+                for y in range(height):
+                    if col[rows[y]]:
+                        self.set(x + dx, top + y, rgb)
             x += len(cols) + font.GAP
         return x - font.GAP
 

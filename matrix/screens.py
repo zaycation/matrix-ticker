@@ -31,10 +31,10 @@ def dashboard(now=None, h24=False):
     cpu = system.cpu_load()
     gtemp = system.gpu_temp()
     gpu = (gtemp - 30) / 60 if gtemp is not None else (system.gpu_load() or 0) / 100
-    c.small("CPU", 0, 0, WHITE)
-    c.small("GPU", 0, 5, WHITE)
+    c.tiny("CPU", 0, 0, WHITE)                          # rows 0-3
+    c.tiny("GPU", 0, 6, WHITE)                          # rows 6-9 (2-row gap between)
     _meter(c, 12, 0, 15, 4, (cpu or 0) / 100)
-    _meter(c, 12, 5, 15, 4, gpu)
+    _meter(c, 12, 6, 15, 4, gpu)
     month, day = MONTHS[now.month - 1], str(now.day)
     date_w = normal_width(month) + 1 + normal_width(day)
     date_x = W - date_w
