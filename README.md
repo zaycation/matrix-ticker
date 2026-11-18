@@ -1,84 +1,82 @@
 # Matrix Ticker
 
-Turn the 900-LED Matrix display on the **Phanteks Evolv X2 Matrix** case into a full-color
-live ticker: sports scores and the weather, scrolling across your case.
+**Live scores, weather and more on the LED display of your Phanteks Evolv X2 Matrix case.**
 
-- **Scores:** NFL, NBA, MLB, WNBA, women's college basketball (top 25), and tennis Grand Slams.
-  Team colors, live clock, red finals. Only games happening today are shown.
-- **Weather:** current conditions, sunrise and sunset, plus the next 5 days or the next 5 hours.
-- **Screens:** a NexLinq-style dashboard (CPU/GPU meters, big clock, date), a calendar page,
-  what's playing (Spotify, browsers…), and a counter you bump with a keyboard shortcut.
-- **Runs quietly in the system tray** and can start with Windows.
+![The ticker scrolling live NBA scores](docs/images/ticker.gif)
 
-> Matrix Ticker talks to the display directly over USB. Phanteks NexLinq can't run at the same
-> time, so the app closes it when the ticker starts (and can reopen it for you).
+## What it shows
+
+**Live scores** in team colors: NFL, NBA, MLB, WNBA, women's college basketball (top 25) and tennis Grand Slams.
+Only games happening today show up.
+
+![A full line of scores](docs/images/ticker-line.png)
+
+**Weather** for your city: right now, sunrise and sunset, then the next 5 days or the next 5 hours.
+
+![Current weather with sunrise and sunset](docs/images/weather-now.png)
+![5-day forecast](docs/images/weather-days.png)
+![Next 5 hours](docs/images/weather-hours.png)
+
+**PC dashboard:** CPU and GPU meters, a big clock and the date.
+
+![Dashboard](docs/images/dashboard.png)
+
+**Calendar:** today's page and this week.
+
+![Calendar](docs/images/calendar.png)
+
+**What's playing** from Spotify, YouTube and other apps.
+
+![Now playing](docs/images/now-playing.png)
+
+**A counter** you bump with a key, even mid-game. Count chests, wins, anything.
+
+![Counter](docs/images/counter.png)
 
 ## Install
 
-1. Download **MatrixTicker-Setup.exe** from the
-   [latest release](https://github.com/zaycation/matrix-ticker/releases/latest).
-2. Run it. If Windows shows **"Windows protected your PC"**, click **More info → Run anyway**
-   (the app isn't code-signed yet).
-3. Click through the installer. Leave **Start Matrix Ticker when Windows starts** checked if you
-   want it running after every boot.
+1. Download **MatrixTicker-Setup.exe** from the [latest release](https://github.com/zaycation/matrix-ticker/releases/latest).
+2. Open it. If Windows says **"Windows protected your PC"**, click **More info**, then **Run anyway**.
+3. Click **Next** through the installer.
 
-No admin rights or Python needed.
+That's it. It can start with Windows and sits quietly by the clock.
 
-## Use
+## How to use it
 
-Open **Matrix Ticker** from the Start menu or desktop.
+<img src="docs/images/app.png" alt="The Matrix Ticker window" width="380" align="right">
 
-1. Tick what to show: sports, **WEATHER**, **NOW PLAYING**, **DASHBOARD**, **CALENDAR**, **COUNTER**.
-   They take turns on the display in that order.
-2. For weather, type your city or ZIP code (e.g. `91367` or `Paris, FR`) and pick **5 days** or **5 hours**.
-3. Press **▶ Run**. Press **■ Stop** to stop; your NexLinq layout comes back once NexLinq is reopened
-   (**Launch NexLinq** button).
+1. Open **Matrix Ticker** from the Start menu.
+2. Tick what you want to see.
+3. For weather, type your city or ZIP code.
+4. Press the big green **Run** button.
 
-| Setting | What it does |
+Everything you change is saved. Closing the window keeps it running in the
+**system tray** (the little icons by the clock). Right-click that icon to stop it or quit.
+
+**Counter:** type a label (like `CHESTS`) and a key (like `f8`), then click **Set**.
+Press that key anytime to add one; the display shows the new count for a few seconds.
+
+**NexLinq:** Phanteks' own app can't run at the same time, so Matrix Ticker closes it when you
+press Run. Use **Launch NexLinq** to bring it back.
+
+<br clear="right">
+
+## Something not working?
+
+| What you see | What to do |
 |---|---|
-| Speed | How fast the ticker scrolls (pixels per second) |
-| Padding | Space between games |
-| Brightness | How bright the ticker is |
-| Screen time | How long the dashboard, calendar and counter stay up |
-| 24-hour clock | Dashboard clock as 14:47 instead of 2:47 |
-| Loop | Keep cycling (off = one pass, then stop) |
-| Close NexLinq on Run | Closes NexLinq automatically when you press Run |
-| Start the ticker when the app opens | With "start with Windows", the ticker runs right after boot |
-| Reset defaults | Puts the settings back (keeps your weather location) |
-
-**The counter:** give it a label (e.g. `CHESTS`) and a shortcut (e.g. `ctrl+alt+c` or `f8`), then
-click **Set**. Pressing the shortcut anywhere, even in a game, adds 1 and flashes the count on the
-display for a few seconds. The window has −1, +1 and Reset.
-
-**The dashboard:** the CPU meter shows CPU load and the GPU meter GPU temperature (NVIDIA cards;
-others show GPU load). CPU temperature isn't supported yet.
-
-**Closing the window** keeps Matrix Ticker running in the **system tray** (by the clock).
-Right-click the tray icon to open it, run or stop the ticker, launch NexLinq, or quit.
-The icon shows a green dot while the ticker is running.
-
-## Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `Error: open failed` | The display isn't connected or is in use. Check its USB cable, and make sure NexLinq is closed (**Quit NexLinq**). |
-| `Image upload failed ... Is NexLinq still running?` | NexLinq is open and fighting the ticker. Click **Quit NexLinq**, then Run. |
-| `Couldn't close NexLinq` | NexLinq runs as Administrator. Close it from its own tray icon, or run Matrix Ticker as Administrator. |
-| Weather: `couldn't find '...'` | Try a different spelling, a ZIP code, or add the country: `Springfield, US`. |
-| Nothing shows / no games | Only games happening today are shown. Tick more sports or WEATHER. |
-| Counter shortcut does nothing in a game | Pick a key the game doesn't use. If the game runs as Administrator, Matrix Ticker must too. |
-| NOW PLAYING never shows | Only shows while something is actually playing, and needs Windows 10/11 media controls. |
-| "Matrix Ticker is already running" | It's in the system tray. Click the up-arrow by the clock to find it. |
+| `Error: open failed` | The display isn't found. Check that it's plugged in, and click **Quit NexLinq**. |
+| `Is NexLinq still running?` | Click **Quit NexLinq**, then **Run** again. |
+| Weather `couldn't find ...` | Try your ZIP code, or add the country: `Springfield, US`. |
+| Nothing shows up | No games today? Tick **WEATHER** or **DASHBOARD** too. |
+| Counter key doesn't work in a game | Pick a key the game doesn't use, like `f8`. |
+| "Already running" | It's in the tray by the clock (click the **^** arrow). |
 
 ## Uninstall
 
-Windows **Settings → Apps → Installed apps → Matrix Ticker → Uninstall**.
-Your settings are in `%APPDATA%\MatrixTicker` if you want to remove them too.
+**Windows Settings → Apps → Installed apps → Matrix Ticker → Uninstall.**
 
-## Credits
+---
 
-Scores from ESPN. Weather data by [Open-Meteo.com](https://open-meteo.com) (free for non-commercial use).
-Not affiliated with Phanteks.
-
-For running from source, command-line options, and how the display's USB protocol was worked out,
-see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
+Scores from ESPN. Weather by [Open-Meteo.com](https://open-meteo.com). Not affiliated with Phanteks.
+Developers: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).

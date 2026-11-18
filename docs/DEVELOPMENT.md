@@ -42,7 +42,7 @@ Text style only (the original single-color ticker using the panel's text widget)
 | `matrix/screens.py`, `canvas.py` | Dashboard, calendar, counter screens; small/big fonts |
 | `matrix/system.py`, `media.py`, `counter.py` | PC stats, now playing, hotkey counter |
 | `matrix/nexlinq.py` | Find / quit / launch NexLinq |
-| `tools/` | Reverse-engineering helpers (captures, panel tests) |
+| `tools/` | Reverse-engineering helpers (captures, panel tests); `make_screenshots.py` renders the README images |
 | `packaging/` | Icon and Inno Setup installer script |
 
 ## Saving your NexLinq layout (optional)
