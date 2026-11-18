@@ -2,3 +2,9 @@ hidapi>=0.14
 tzdata
 pystray>=0.19
 Pillow>=10
+psutil
+nvidia-ml-py
+pynput
+winrt-runtime; sys_platform == "win32"
+winrt-Windows.Foundation; sys_platform == "win32"
+winrt-Windows.Media.Control; sys_platform == "win32"

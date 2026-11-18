@@ -1,0 +1,100 @@
+"""Draw static 90x10 screens (dashboard, calendar, counter) pixel by pixel.
+
+Three text sizes:
+- small: 3x5 font (two lines fit on the panel)
+- normal: the 5x7 ticker font
+- big: 10-px-tall digits/clock (the 5x7 font stretched vertically)
+"""
+from . import font
+
+W, H = 90, 10
+
+SMALL = {
+    "A": [".#.", "#.#", "###", "#.#", "#.#"], "B": ["##.", "#.#", "##.", "#.#", "##."],
+    "C": [".##", "#..", "#..", "#..", ".##"], "D": ["##.", "#.#", "#.#", "#.#", "##."],
+    "E": ["###", "#..", "##.", "#..", "###"], "F": ["###", "#..", "##.", "#..", "#.."],
+    "G": [".##", "#..", "#.#", "#.#", ".##"], "H": ["#.#", "#.#", "###", "#.#", "#.#"],
+    "I": ["###", ".#.", ".#.", ".#.", "###"], "J": ["..#", "..#", "..#", "#.#", ".#."],
+    "K": ["#.#", "#.#", "##.", "#.#", "#.#"], "L": ["#..", "#..", "#..", "#..", "###"],
+    "M": ["#.#", "###", "###", "#.#", "#.#"], "N": ["##.", "#.#", "#.#", "#.#", "#.#"],
+    "O": [".#.", "#.#", "#.#", "#.#", ".#."], "P": ["##.", "#.#", "##.", "#..", "#.."],
+    "Q": [".#.", "#.#", "#.#", "##.", ".##"], "R": ["##.", "#.#", "##.", "#.#", "#.#"],
+    "S": [".##", "#..", ".#.", "..#", "##."], "T": ["###", ".#.", ".#.", ".#.", ".#."],
+    "U": ["#.#", "#.#", "#.#", "#.#", "###"], "V": ["#.#", "#.#", "#.#", "#.#", ".#."],
+    "W": ["#.#", "#.#", "###", "###", "#.#"], "X": ["#.#", "#.#", ".#.", "#.#", "#.#"],
+    "Y": ["#.#", "#.#", ".#.", ".#.", ".#."], "Z": ["###", "..#", ".#.", "#..", "###"],
+    "0": ["###", "#.#", "#.#", "#.#", "###"], "1": [".#.", "##.", ".#.", ".#.", "###"],
+    "2": ["##.", "..#", ".#.", "#..", "###"], "3": ["##.", "..#", ".#.", "..#", "##."],
+    "4": ["#.#", "#.#", "###", "..#", "..#"], "5": ["###", "#..", "##.", "..#", "##."],
+    "6": [".##", "#..", "###", "#.#", "###"], "7": ["###", "..#", ".#.", ".#.", ".#."],
+    "8": ["###", "#.#", "###", "#.#", "###"], "9": ["###", "#.#", "###", "..#", "##."],
+    ":": [".", "#", ".", "#", "."], ".": [".", ".", ".", ".", "#"], "-": ["...", "...", "###", "...", "..."],
+    "%": ["#.#", "..#", ".#.", "#..", "#.#"], "/": ["..#", "..#", ".#.", "#..", "#.."],
+    "°": [".#.", "#.#", ".#.", "...", "..."], " ": ["..", "..", "..", "..", ".."],
+    "+": ["...", ".#.", "###", ".#.", "..."], "'": ["#", "#", ".", ".", "."],
+}
+BIG_ROWS = [int(y * 7 / 10) for y in range(10)]   # stretch 7 rows to 10
+
+
+class Canvas:
+    def __init__(self):
+        self.px = [[(0, 0, 0)] * W for _ in range(H)]
+
+    def set(self, x, y, rgb):
+        if 0 <= x < W and 0 <= y < H and rgb:
+            self.px[y][x] = rgb
+
+    def rect(self, x0, y0, x1, y1, rgb):
+        """Filled rectangle, inclusive corners."""
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                self.set(x, y, rgb)
+
+    # ---- text ----
+    def small(self, text, x, y, rgb):
+        """3x5 text at (x, y) = top-left. Returns the x after the text."""
+        for ch in text.upper():
+            rows = SMALL.get(ch, SMALL[" "])
+            for dy, row in enumerate(rows):
+                for dx, c in enumerate(row):
+                    if c == "#":
+                        self.set(x + dx, y + dy, rgb)
+            x += len(rows[0]) + 1
+        return x - 1
+
+    def normal(self, text, x, y, rgb):
+        """5x7 ticker font at (x, y) = top-left. Returns the x after the text."""
+        for ch in text:
+            cols = font.icon_columns(ch) if ch in font.ICONS else font.glyph_columns(ch)
+            for dx, col in enumerate(cols):
+                for dy, on in enumerate(col):
+                    if on:
+                        self.set(x + dx, y + dy, on if isinstance(on, tuple) else rgb)
+            x += len(cols) + font.GAP
+        return x - font.GAP
+
+    def big(self, text, x, rgb):
+        """10-px-tall text (digits, ':' and letters), full panel height. Returns end x."""
+        for ch in text:
+            cols = font.glyph_columns(ch)
+            for dx, col in enumerate(cols):
+                for y in range(H):
+                    if col[BIG_ROWS[y]]:
+                        self.set(x + dx, y, rgb)
+            x += len(cols) + font.GAP
+        return x - font.GAP
+
+    def to_bytes(self):
+        return bytes(c for row in self.px for px in row for c in px)
+
+
+def small_width(text):
+    return sum(len(SMALL.get(ch, SMALL[" "])[0]) + 1 for ch in text.upper()) - 1 if text else 0
+
+
+def normal_width(text):
+    return font.text_width(text)
+
+
+def big_width(text):
+    return font.text_width(text)       # same columns as the 5x7 font, just taller

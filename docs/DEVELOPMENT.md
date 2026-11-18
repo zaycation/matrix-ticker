@@ -20,6 +20,8 @@ python main.py                                                     # older singl
 ```
 
 Sport flags: `--nfl --nba --mlb --wnba --ncaaw --atp --wta --weather` (combine them).
+Screens: `--dashboard --calendar --counter --nowplaying`, `--screen-seconds 10`, `--24h`.
+Preview example: `python main.py --style scroll --preview --dashboard --calendar --counter`.
 Scroll style: `--speed` (px/s), `--step`, `--brightness`, `--league-gap`, `--sep`.
 Weather: `--location`, `--hourly`, `--celsius`. Ctrl+C stops and restores `layouts/default.json`.
 
@@ -37,6 +39,8 @@ Text style only (the original single-color ticker using the panel's text widget)
 | `matrix/render.py`, `font.py` | 90x10 frame rendering, pixel font and weather icons |
 | `matrix/scores.py`, `style.py` | ESPN data and color rules |
 | `matrix/weather.py` | Open-Meteo forecast |
+| `matrix/screens.py`, `canvas.py` | Dashboard, calendar, counter screens; small/big fonts |
+| `matrix/system.py`, `media.py`, `counter.py` | PC stats, now playing, hotkey counter |
 | `matrix/nexlinq.py` | Find / quit / launch NexLinq |
 | `tools/` | Reverse-engineering helpers (captures, panel tests) |
 | `packaging/` | Icon and Inno Setup installer script |

@@ -31,6 +31,10 @@ jobs:
           pyinstaller --noconfirm --windowed --name MatrixTicker
           --icon packaging/icon.ico
           --hidden-import pystray._win32
+          --hidden-import pynput.keyboard._win32
+          --hidden-import pynput.mouse._win32
+          --hidden-import pynvml
+          --collect-submodules winrt
           --collect-data tzdata
           gui.py
 

@@ -16,6 +16,7 @@ import tkinter as tk
 from tkinter import filedialog
 
 from matrix import nexlinq, scores
+from matrix.counter import Counter
 from matrix.ticker import ITEMS, WEATHER, ScrollTicker, Settings, restore_layout
 
 try:
@@ -93,6 +94,7 @@ class App:
         ("speed", "Speed  (pixels/s)", 6, 24, 0.5, float),
         ("padding", "Padding  (spaces)", 1, 15, 1, int),
         ("brightness", "Brightness  (%)", 10, 100, 5, int),
+        ("screen_seconds", "Screen time  (s)", 3, 30, 1, int),
     ]
 
     def __init__(self, root):
@@ -102,12 +104,15 @@ class App:
         self.logq, self._save_job = queue.Queue(), None
 
         saved = load_cfg().get("gui", {})
-        for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode"):
+        for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
+                    "screen_seconds", "clock_24h"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
             self.settings.leagues = [lg for lg in ITEMS if lg in saved["leagues"]]
         self.cmdq, self.tray, self._told_tray, self._closed = queue.Queue(), None, False, False
+        self.ticker = None
+        self.counter = Counter(on_change=self._counter_bumped)
 
         root.title("Matrix Ticker")
         root.configure(bg=BG)
@@ -146,10 +151,11 @@ class App:
             v = tk.BooleanVar(value=lg in self.settings.leagues)
             self._check(box2, lg, v, self._leagues_changed).grid(row=1 + i // 4, column=i % 4, sticky="w")
             self.league_vars[lg] = v
+        r0 = 1 + -(-len(ITEMS) // 4)                     # first row under the checkboxes
         tk.Label(box2, text="Weather location", bg=PANEL, fg=MUTED, font=FONT).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+            row=r0, column=0, columnspan=2, sticky="w", pady=(6, 0))
         loc = tk.Frame(box2, bg=PANEL)
-        loc.grid(row=4, column=0, columnspan=4, sticky="w")
+        loc.grid(row=r0 + 1, column=0, columnspan=4, sticky="w")
         self.location = tk.StringVar(value=self.settings.location)
         self.location.trace_add("write", lambda *_: self._location_changed())
         tk.Entry(loc, textvariable=self.location, width=26, bg=TROUGH, fg=FG, insertbackground=FG,
@@ -163,16 +169,43 @@ class App:
                            bg=PANEL, fg=FG, selectcolor=TROUGH, activebackground=PANEL, activeforeground=FG,
                            highlightthickness=0, bd=0, font=FONT).pack(side="left", padx=(8, 0))
         tk.Label(box2, text="City or ZIP, e.g. 91367", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).grid(
-            row=3, column=2, columnspan=2, sticky="e", pady=(6, 0))
-        tk.Label(box2, text="Options", bg=PANEL, fg=MUTED, font=FONT).grid(row=5, column=0, sticky="w", pady=(6, 0))
+            row=r0, column=2, columnspan=2, sticky="e", pady=(6, 0))
+        tk.Label(box2, text="Options", bg=PANEL, fg=MUTED, font=FONT).grid(row=r0 + 2, column=0, sticky="w", pady=(6, 0))
         self.loop = tk.BooleanVar(value=self.settings.loop)
         self.close_nexlinq = tk.BooleanVar(value=saved.get("close_nexlinq", True))
         self.autorun = tk.BooleanVar(value=saved.get("autorun", False))
-        self._check(box2, "Loop", self.loop, self._opts_changed).grid(row=6, column=0, sticky="w")
+        self._check(box2, "Loop", self.loop, self._opts_changed).grid(row=r0 + 3, column=0, sticky="w")
         self._check(box2, "Close NexLinq on Run", self.close_nexlinq, self._schedule_save).grid(
-            row=6, column=1, columnspan=3, sticky="w")
+            row=r0 + 3, column=1, columnspan=3, sticky="w")
         self._check(box2, "Start the ticker when the app opens", self.autorun, self._schedule_save).grid(
-            row=7, column=0, columnspan=4, sticky="w")
+            row=r0 + 4, column=0, columnspan=4, sticky="w")
+        self.h24 = tk.BooleanVar(value=self.settings.clock_24h)
+        self._check(box2, "24-hour clock", self.h24, self._opts_changed).grid(row=r0 + 5, column=0, columnspan=4, sticky="w")
+
+        # counter
+        box3 = tk.Frame(outer, bg=PANEL, padx=12, pady=8)
+        box3.pack(fill="x", pady=(8, 0))
+        tk.Label(box3, text="Counter", bg=PANEL, fg=MUTED, font=FONT).grid(row=0, column=0, sticky="w")
+        self.count_label = tk.Label(box3, text=str(self.counter.count), bg=PANEL, fg="#ffc800",
+                                    font=("Segoe UI", 16, "bold"), width=5, anchor="e")
+        self.count_label.grid(row=0, column=3, rowspan=2, sticky="e")
+        tk.Label(box3, text="Label", bg=PANEL, fg=FG, font=FONT).grid(row=1, column=0, sticky="w")
+        self.c_label = tk.StringVar(value=self.counter.label)
+        self.c_label.trace_add("write", lambda *_: self._counter_label())
+        self._entry(box3, self.c_label, 12).grid(row=1, column=1, sticky="w", padx=4)
+        tk.Label(box3, text="Shortcut", bg=PANEL, fg=FG, font=FONT).grid(row=2, column=0, sticky="w", pady=(4, 0))
+        self.c_hotkey = tk.StringVar(value=self.counter.hotkey)
+        self._entry(box3, self.c_hotkey, 12).grid(row=2, column=1, sticky="w", padx=4, pady=(4, 0))
+        FlatButton(box3, "Set", self._set_hotkey, padx=8, pady=1, font=("Segoe UI", 9)).grid(
+            row=2, column=2, sticky="w", pady=(4, 0))
+        cb = tk.Frame(box3, bg=PANEL)
+        cb.grid(row=2, column=3, sticky="e", pady=(4, 0))
+        for text, cmd in (("−1", lambda: self.counter.add(-1)), ("+1", lambda: self.counter.add(1)),
+                          ("Reset", self.counter.reset)):
+            FlatButton(cb, text, cmd, padx=6, pady=1, font=("Segoe UI", 9)).pack(side="left", padx=1)
+        tk.Label(box3, text="e.g. ctrl+alt+c or f8 (works in games)", bg=PANEL, fg=MUTED,
+                 font=("Segoe UI", 8)).grid(row=3, column=1, columnspan=3, sticky="w", padx=4)
+        box3.columnconfigure(2, weight=1)
 
         # small buttons
         small = tk.Frame(outer, bg=BG)
@@ -194,6 +227,9 @@ class App:
         tk.Label(outer, text="Scores: ESPN  ·  Weather data by Open-Meteo.com", bg=BG, fg=MUTED,
                  font=("Segoe UI", 8)).pack(anchor="e", pady=(4, 0))
 
+        err = self.counter.listen()
+        if err:
+            self.log(err)
         root.protocol("WM_DELETE_WINDOW", self.hide_or_quit)
         dark_title_bar(root)
         self._start_tray()
@@ -226,6 +262,25 @@ class App:
         scale.bind("<MouseWheel>", wheel)
         self.vars[attr] = (var, changed)
 
+    def _entry(self, parent, var, width):
+        return tk.Entry(parent, textvariable=var, width=width, bg=TROUGH, fg=FG, insertbackground=FG,
+                        relief="flat", font=FONT, highlightthickness=1, highlightbackground=TROUGH,
+                        highlightcolor=SLIDER)
+
+    def _counter_bumped(self, n):
+        """Called from the hotkey thread or a button: show it in the window and on the panel."""
+        self.cmdq.put(lambda: self.count_label.configure(text=str(n)))
+        if self.ticker is not None:
+            self.ticker.flash.set()
+
+    def _counter_label(self):
+        self.counter.label = self.c_label.get().strip() or "COUNT"
+        self.counter.save()
+
+    def _set_hotkey(self):
+        err = self.counter.listen(self.c_hotkey.get().strip())
+        self.log(err or f"Counter shortcut: {self.counter.hotkey}")
+
     def _check(self, parent, text, var, command):
         return tk.Checkbutton(parent, text=text, variable=var, command=command, bg=PANEL, fg=FG,
                               selectcolor=TROUGH, activebackground=PANEL, activeforeground=FG,
@@ -244,6 +299,7 @@ class App:
 
     def _opts_changed(self):
         self.settings.loop = self.loop.get()
+        self.settings.clock_24h = self.h24.get()
         self._schedule_save()
 
     def _schedule_save(self):
@@ -259,7 +315,8 @@ class App:
         cfg["gui"] = {"speed": s.speed, "padding": s.padding, "brightness": s.brightness,
                       "leagues": s.leagues, "loop": s.loop, "close_nexlinq": self.close_nexlinq.get(),
                       "location": s.location, "units": s.units, "weather_mode": s.weather_mode,
-                      "autorun": self.autorun.get()}
+                      "autorun": self.autorun.get(), "screen_seconds": s.screen_seconds,
+                      "clock_24h": s.clock_24h}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 
@@ -275,6 +332,7 @@ class App:
         self.autorun.set(False)
         self.celsius.set(False)
         self.wmode.set("daily")
+        self.h24.set(False)
         self._location_changed()
         self._leagues_changed()
         self._opts_changed()
@@ -334,11 +392,14 @@ class App:
             from matrix.transport import Matrix
             panel = Matrix()
             self.log("Ticker started.")
-            ScrollTicker(panel, self.settings, log=self.log, stop_event=self.stop_event).run()
+            self.ticker = ScrollTicker(panel, self.settings, log=self.log, stop_event=self.stop_event,
+                                       counter=self.counter)
+            self.ticker.run()
             self.log("Ticker stopped." if self.stop_event.is_set() else "Ticker finished.")
         except Exception as e:
             self.log(f"Error: {e}")
         finally:
+            self.ticker = None
             if panel:
                 try:
                     self.log(restore_layout(panel))
@@ -401,6 +462,7 @@ class App:
                 pass
 
     def quit(self):
+        self.counter.stop_listening()
         self._stop_and_wait()
         if self._save_job:
             self._save()

@@ -30,7 +30,7 @@ import sys
 import time
 
 from matrix import render, scores
-from matrix.ticker import WEATHER, ScrollTicker, Settings
+from matrix.ticker import CALENDAR, COUNTER, DASHBOARD, NOWPLAYING, WEATHER, ScrollTicker, Settings
 
 TEXT_MAX = 50
 LIVE, FINAL, UPCOMING, INFO = (0, 255, 80), (170, 170, 170), (255, 255, 255), (80, 160, 255)
@@ -176,17 +176,21 @@ def run_scroll(panel, args, leagues):
                         padding=len(args.sep), leagues=leagues, loop=not args.once,
                         location=args.location, units="C" if args.celsius else "F",
                         weather_mode="hourly" if args.hourly else "daily",
+                        screen_seconds=args.screen_seconds, clock_24h=args.h24,
                         verbose=args.verbose, league_gap=args.league_gap)
     source = (lambda lg: DEMO.get(lg, [])) if args.demo else None
+    from matrix.counter import Counter
+    counter = Counter()
     if panel:
         print("Scroll ticker running (NexLinq must be closed). Ctrl+C to stop.")
-        ScrollTicker(panel, settings, games_source=source).run()
+        ScrollTicker(panel, settings, games_source=source, counter=counter).run()
     else:
         print("\x1b[2J", end="")
 
         def log_below(msg):   # messages go on a line under the 10-row preview
             print(f"\x1b[12;1H\x1b[K{msg}", flush=True)
-        ScrollTicker(None, settings, log=log_below, games_source=source, show=render.preview).run()
+        ScrollTicker(None, settings, log=log_below, games_source=source, show=render.preview,
+                     counter=counter).run()
 
 
 def restore(panel):
@@ -228,6 +232,12 @@ def main():
                         help=f"show only {lg} (combine flags for several)")
     ap.add_argument("--weather", dest="only", action="append_const", const=WEATHER,
                     help="include the weather forecast (scroll style; needs --location)")
+    for flag, item in (("--dashboard", DASHBOARD), ("--calendar", CALENDAR), ("--counter", COUNTER),
+                       ("--nowplaying", NOWPLAYING)):
+        ap.add_argument(flag, dest="only", action="append_const", const=item,
+                        help=f"include the {item.lower()} screen (scroll style)")
+    ap.add_argument("--screen-seconds", type=float, default=10.0, help="seconds per static screen")
+    ap.add_argument("--24h", dest="h24", action="store_true", help="24-hour clock on the dashboard")
     ap.add_argument("--location", default="", help='weather location: city, ZIP, "91367, US" or "lat,lon"')
     ap.add_argument("--celsius", action="store_true", help="weather in Celsius")
     ap.add_argument("--hourly", action="store_true", help="weather: now + next 5 hours instead of 5 days")
@@ -257,8 +267,8 @@ def main():
 
         while True:
             for league in leagues:
-                if league == WEATHER:      # weather needs the full-color scroll style
-                    continue
+                if league in (WEATHER, NOWPLAYING, DASHBOARD, CALENDAR, COUNTER):
+                    continue               # these need the full-color scroll style
                 try:
                     games = DEMO.get(league, []) if args.demo else scores.games(league)
                 except Exception as e:  # network hiccup: skip this league this cycle

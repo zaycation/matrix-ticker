@@ -10,13 +10,16 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from . import render, scores, style, weather
+from . import render, scores, screens, style, weather
 
 from .paths import RESTORE_FILE
 MIN_GAP = 0.15          # the panel needs > 0.05 s after each frame; 0.15 s is proven
 STATE_ORDER = {"in": 0, "post": 1, "pre": 2}
-WEATHER = "WEATHER"
-ITEMS = list(scores.ALL) + [WEATHER]     # everything the ticker can cycle through
+WEATHER, NOWPLAYING = "WEATHER", "NOW PLAYING"
+DASHBOARD, CALENDAR, COUNTER = "DASHBOARD", "CALENDAR", "COUNTER"
+SCREENS = [DASHBOARD, CALENDAR, COUNTER]            # static screens, shown for screen_seconds
+ITEMS = list(scores.ALL) + [WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
+FLASH_SECONDS = 3.0
 
 
 @dataclass
@@ -28,6 +31,8 @@ class Settings:
     location: str = ""             # weather: city, ZIP, "91367, US" or "lat,lon"
     units: str = "F"               # weather: F or C
     weather_mode: str = "daily"    # weather: "daily" (5 days) or "hourly" (next 5 hours)
+    screen_seconds: float = 10.0   # how long each static screen (dashboard, calendar, counter) stays
+    clock_24h: bool = False
     loop: bool = True
     verbose: bool = False
     step: int = 4                  # pixels moved per frame
@@ -71,11 +76,15 @@ def restore_layout(panel):
 
 
 class ScrollTicker:
-    def __init__(self, panel, settings, log=print, stop_event=None, games_source=None, show=None):
+    def __init__(self, panel, settings, log=print, stop_event=None, games_source=None, show=None,
+                 counter=None):
         """panel: matrix.transport.Matrix (or None with show= for previews).
-        games_source(league) -> list of games; defaults to live ESPN data."""
+        games_source(league) -> list of games; defaults to live ESPN data.
+        counter: matrix.counter.Counter for the COUNTER screen and its flash."""
         self.panel, self.s, self.log = panel, settings, log
         self.stop = stop_event or threading.Event()
+        self.flash = threading.Event()        # set when the counter is bumped
+        self.counter = counter
         self.games_source = games_source or scores.games
         self.show = show or self._send
 
@@ -83,7 +92,7 @@ class ScrollTicker:
         """Sleep in short steps: Event.wait() can't be interrupted by Ctrl+C on Windows,
         time.sleep() can. Stops early if stop is set."""
         end = time.perf_counter() + max(0.0, seconds)
-        while not self.stop.is_set():
+        while not self.stop.is_set() and not self.flash.is_set():
             left = end - time.perf_counter()
             if left <= 0:
                 return
@@ -94,8 +103,57 @@ class ScrollTicker:
         if not ok:
             raise RuntimeError(f"Image upload failed: {msg}. Is NexLinq still running?")
 
+    def _frame(self, buf):
+        """Send one frame (with brightness applied); returns how long it took."""
+        t0 = time.perf_counter()
+        self.show(dim(buf, self.s.brightness))
+        return time.perf_counter() - t0
+
+    def _maybe_flash(self):
+        """If the counter was just bumped, cut in and show it for a few seconds."""
+        if not self.flash.is_set() or self.counter is None:
+            self.flash.clear()
+            return
+        self.flash.clear()
+        end, blink = time.perf_counter() + FLASH_SECONDS, False
+        while time.perf_counter() < end and not self.stop.is_set():
+            took = self._frame(screens.counter(self.counter.label, self.counter.count, flash=True, blink=blink))
+            blink = not blink
+            if self.flash.is_set():            # bumped again: restart the timer
+                self.flash.clear()
+                end = time.perf_counter() + FLASH_SECONDS
+            self._wait(max(MIN_GAP, 0.5 - took))
+
+    def _screen(self, item):
+        """Show a static screen for screen_seconds, redrawing about once a second."""
+        if item == COUNTER and self.counter is None:
+            return False
+        self.log(item.title())
+        end = time.perf_counter() + self.s.screen_seconds
+        while time.perf_counter() < end and not self.stop.is_set():
+            self._maybe_flash()
+            if item == DASHBOARD:
+                buf = screens.dashboard(h24=self.s.clock_24h)
+            elif item == CALENDAR:
+                buf = screens.calendar()
+            else:
+                buf = screens.counter(self.counter.label, self.counter.count)
+            took = self._frame(buf)
+            self._wait(max(MIN_GAP, 1.0 - took))
+        return True
+
     def _strip(self, item):
         """Pixel strip for one cycle item, or None to skip it."""
+        if item == NOWPLAYING:
+            segs = screens.now_playing_segments()
+            if not segs:
+                if self.s.verbose:
+                    self.log("Now playing: nothing playing" + ("" if screens.media.available()
+                                                               else " (needs Windows media support)"))
+                return None
+            cols = render.strip(segs)
+            self.log("Now playing" + (f", {len(cols)} px" if self.s.verbose else ""))
+            return cols
         if item == WEATHER:
             if not self.s.location.strip():
                 if self.s.verbose:
@@ -126,28 +184,32 @@ class ScrollTicker:
     def run(self):
         while not self.stop.is_set():
             shown_any = False
-            for league in list(self.s.leagues):
+            for item in list(self.s.leagues):
                 if self.stop.is_set():
                     return
-                cols = self._strip(league)
+                if item in SCREENS:
+                    shown_any |= self._screen(item)
+                    continue
+                cols = self._strip(item)
                 if cols is None:
                     continue
                 shown_any = True
-                offset, upload = -render.W, 0.14
+                offset = -render.W
                 while offset <= len(cols):
                     if self.stop.is_set():
                         return
-                    t0 = time.perf_counter()
-                    self.show(dim(render.frame(cols, offset), self.s.brightness))
-                    upload = time.perf_counter() - t0
+                    self._maybe_flash()
+                    upload = self._frame(render.frame(cols, offset))
                     # If the speed asks for more than step px per achievable frame, move further per frame.
                     speed = max(1.0, self.s.speed)
                     step = max(self.s.step, math.ceil(speed * (upload + MIN_GAP)))
                     self._wait(max(MIN_GAP, step / speed - upload))
                     offset += step
                 self._wait(self.s.league_gap)
+                self._maybe_flash()
             if not self.s.loop:
                 return
             if not shown_any:
                 self.log("Nothing to show right now in the selected items; checking again in 60 s.")
                 self._wait(60)
+                self._maybe_flash()
