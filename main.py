@@ -187,8 +187,8 @@ def run_scroll(panel, args, leagues):
     else:
         print("\x1b[2J", end="")
 
-        def log_below(msg):   # messages go on a line under the 10-row preview
-            print(f"\x1b[12;1H\x1b[K{msg}", flush=True)
+        def log_below(msg):   # messages go on a line under the preview
+            print(f"\x1b[{render.preview_rows() + 2};1H\x1b[K{msg}", flush=True)
         ScrollTicker(None, settings, log=log_below, games_source=source, show=render.preview,
                      counter=counter).run()
 

@@ -57,13 +57,48 @@ def centered(segments):
     return frame(cols, -max(0, (W - len(cols)) // 2) if len(cols) <= W else 0)
 
 
+_last_size = None
+
+
+def preview_scale():
+    """(chars per LED across, rows per LED down) to fill the terminal width.
+    Terminal cells are about twice as tall as wide, so rows scale half as much."""
+    import shutil
+    cols = shutil.get_terminal_size((90, 24)).columns
+    kx = max(1, cols // W)
+    return kx, max(1, kx // 2)
+
+
+def preview_rows():
+    """Terminal rows the preview uses (messages go below this)."""
+    return H * preview_scale()[1]
+
+
 def preview(buf):
-    """Print a frame in a truecolor terminal (2 characters per LED)."""
-    out = ["\x1b[H"]
+    """Draw a frame in a truecolor terminal, scaled to the window width.
+    At larger sizes each LED gets a dark edge so it looks like the panel."""
+    global _last_size
+    kx, ky = preview_scale()
+    out = []
+    if (kx, ky) != _last_size:          # window resized: clear leftovers
+        out.append("\x1b[2J")
+        _last_size = (kx, ky)
+    out.append("\x1b[H")
+    off = "\x1b[48;2;20;20;20m"
+    gap = "\x1b[48;2;8;8;8m"
     for y in range(H):
-        for x in range(W):
-            i = (y * W + x) * 3
-            r, g, b = buf[i], buf[i + 1], buf[i + 2]
-            out.append(f"\x1b[48;2;{r};{g};{b}m " if (r or g or b) else "\x1b[48;2;20;20;20m ")
-        out.append("\x1b[0m\n")
+        for sub in range(ky):
+            line = []
+            edge_row = ky >= 2 and sub == ky - 1
+            for x in range(W):
+                i = (y * W + x) * 3
+                r, g, b = buf[i], buf[i + 1], buf[i + 2]
+                color = f"\x1b[48;2;{r};{g};{b}m" if (r or g or b) else off
+                if edge_row:
+                    line.append(gap + " " * kx)
+                elif kx >= 3:
+                    line.append(color + " " * (kx - 1) + gap + " ")
+                else:
+                    line.append(color + " " * kx)
+            out.append("".join(line) + "\x1b[0m\n")
     print("".join(out), end="", flush=True)
