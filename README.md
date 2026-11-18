@@ -1,130 +1,70 @@
-# matrix-ticker
+# Matrix Ticker
 
-Live NFL/NBA/WNBA scores on the Phanteks Matrix-900 (Evolv X2 Matrix).
+Turn the 900-LED Matrix display on the **Phanteks Evolv X2 Matrix** case into a full-color
+live ticker: sports scores and the weather, scrolling across your case.
 
-## Run
+- **Scores:** NFL, NBA, MLB, WNBA, women's college basketball (top 25), and tennis Grand Slams.
+  Team colors, live clock, red finals. Only games happening today are shown.
+- **Weather:** current conditions, sunrise and sunset, plus the next 5 days or the next 5 hours.
+- **Runs quietly in the system tray** and can start with Windows.
 
-1. In NexLinq: full-width layout (one slot), Creator → Text widget, scrolling on, Sent.
-2. `pip install hidapi tzdata` (tzdata gives Windows the Pacific time zone)
-3. From the folder containing `main.py`:
+> Matrix Ticker talks to the display directly over USB. Phanteks NexLinq can't run at the same
+> time, so the app closes it when the ticker starts (and can reopen it for you).
 
-```
-python main.py --calibrate        # once: time two scroll lengths (saved to calib.json)
-python tools/paneltest.py chars   # which punctuation the panel can draw
-python tools/paneltest.py colors  # which colors look right
-python main.py --preview --demo   # check output in the terminal, no panel, no network
-python main.py --preview          # live scores, terminal only
-python main.py                    # live scores on the panel
-python main.py --leagues NFL,NBA --page-buffer 1 --league-gap 4
-```
+## Install
 
-Live games are green, finals gray, upcoming white. Only live games and games starting
-today (Pacific) are shown, so off-season leagues are skipped. Leagues: NFL, NBA, MLB,
-WNBA, NCAAW (top 25), ATP, WTA (Grand Slams). Quiet by default; `-v` prints each page. Stop with Ctrl+C.
-
-## Protocol (decoded from USB captures)
-
-The panel is an HID device (VID 2E3C, PID 6500, vendor usage page 0xFF1B).
-Every packet is 64 bytes: `[0]=01` report ID, `[1]=command`, `[5]=payload length`.
-The panel echoes each packet back to every open handle. It draws widgets itself; NexLinq never sends pixels.
-
-| Cmd | Bytes | Meaning |
-|---|---|---|
-| 06 | `01 06 00 00 00 3a` + unix time (big-endian, `[6..9]`) + sensor values | NexLinq's once-a-second live data |
-| 04 | `01 04 00 00 00 01 b4` | Begin update (`b4`/`84` depends on layout) |
-| 05 | `01 05 ff 00 00 01 00` | Prepare |
-| 02 | `01 02 00 00 00 n+1 idx` + text, ff-padded to 50, 7 zeros | Text for widget `idx` |
-| 03 | `01 03 count 00 index 29` + 41 bytes | One widget: layout, category, item, scroll, position, text/bg/icon RGB |
-
-A text packet on its own is ignored. Always send the full sequence 04 → 05 → 02 → 03.
-
-Creator Text widget, `03` payload: `layout 04 00 scroll 02 | text RGB | bg RGB | icon RGB`.
-
-## Tools
-
-- `tools/find_device.py`: list HID devices
-- `tools/descriptor.py`: dump the panel's HID report descriptor
-- `tools/analyze.py`: `summary` / `changes` / `diff` on tshark captures (`--addr 3.9.`, `--dir in`)
-- `tools/send_full.py`: replay the old layout-05 sequence with custom text (kept for reference)
-
-## Install (Windows)
-
-1. Download **MatrixTicker-Setup-x.y.z.exe** from the
+1. Download **MatrixTicker-Setup.exe** from the
    [latest release](https://github.com/zaycation/matrix-ticker/releases/latest).
-2. Run it and click through the installer. It can add a desktop icon and start Matrix Ticker
-   with Windows (hidden in the system tray). No admin rights or Python needed.
-3. Open Matrix Ticker, pick your sports, type a weather location, and press **Run**.
+2. Run it. If Windows shows **"Windows protected your PC"**, click **More info → Run anyway**
+   (the app isn't code-signed yet).
+3. Click through the installer. Leave **Start Matrix Ticker when Windows starts** checked if you
+   want it running after every boot.
 
-Settings live in `%APPDATA%\MatrixTicker`. Uninstall from Windows Settings > Apps.
-The ticker needs NexLinq closed while it runs; the app does that for you (and can relaunch it).
+No admin rights or Python needed.
 
-## Control window (GUI)
+## Use
 
-```
-pythonw gui.py          # from source (pip install -r requirements.txt)
-pythonw gui.py --tray   # start hidden in the system tray
-```
+Open **Matrix Ticker** from the Start menu or desktop.
 
-Closing the window keeps the app in the system tray (right-click the icon: Open, Run/Stop,
-Launch NexLinq, Quit). Only one copy runs at a time.
+1. Tick what to show: the sports you follow and **WEATHER**.
+2. For weather, type your city or ZIP code (e.g. `91367` or `Paris, FR`) and pick **5 days** or **5 hours**.
+3. Press **▶ Run**. Press **■ Stop** to stop; your NexLinq layout comes back once NexLinq is reopened
+   (**Launch NexLinq** button).
 
-**Weather:** tick WEATHER and type a city or ZIP (e.g. `91367`, `Paris, FR`). It cycles with the
-sports: current conditions plus today and the next 4 days (highs), or the next 5 hours, plus the next sunrise and sunset, with icons. Data by
-[Open-Meteo.com](https://open-meteo.com) (free, non-commercial).
+| Setting | What it does |
+|---|---|
+| Speed | How fast the ticker scrolls (pixels per second) |
+| Padding | Space between games |
+| Brightness | How bright the ticker is |
+| Loop | Keep cycling (off = one pass, then stop) |
+| Close NexLinq on Run | Closes NexLinq automatically when you press Run |
+| Start the ticker when the app opens | With "start with Windows", the ticker runs right after boot |
+| Reset defaults | Puts the settings back (keeps your weather location) |
 
-Sliders (apply live): speed (pixels per second), padding (spaces between games), brightness.
-Checkboxes: sports, loop, verbose log, close NexLinq on Run. Buttons: Run, Stop, Quit NexLinq,
-Launch NexLinq, Quit, Quit + launch NexLinq. Settings are saved to `config.json`. The first time
-NexLinq is closed from here, its location is remembered for Launch (or you're asked once).
+**Closing the window** keeps Matrix Ticker running in the **system tray** (by the clock).
+Right-click the tray icon to open it, run or stop the ticker, launch NexLinq, or quit.
+The icon shows a green dot while the ticker is running.
 
-## Full-color scroll style
+## Troubleshooting
 
-Uses the panel's EDITOR (bitmap) path so every character can have its own color: league name
-red/green/white by game status, gray `:` `@` `-` and game clock, red `F`, team colors.
-**NexLinq must be closed** (it answers image uploads with its own). The GUI does this for you.
+| Problem | Fix |
+|---|---|
+| `Error: open failed` | The display isn't connected or is in use. Check its USB cable, and make sure NexLinq is closed (**Quit NexLinq**). |
+| `Image upload failed ... Is NexLinq still running?` | NexLinq is open and fighting the ticker. Click **Quit NexLinq**, then Run. |
+| `Couldn't close NexLinq` | NexLinq runs as Administrator. Close it from its own tray icon, or run Matrix Ticker as Administrator. |
+| Weather: `couldn't find '...'` | Try a different spelling, a ZIP code, or add the country: `Springfield, US`. |
+| Nothing shows / no games | Only games happening today are shown. Tick more sports or WEATHER. |
+| "Matrix Ticker is already running" | It's in the system tray. Click the up-arrow by the clock to find it. |
 
-```
-python main.py --style scroll --preview --demo --nba   # see it in the terminal first
-python main.py --style scroll --speed 13 --brightness 80
-```
+## Uninstall
 
-Image protocol (from the EDITOR capture): `04` begin, `05 ff .. 01` prepare, 49 data packets
-`01 05 00 00 idx 3a 5a 0a` + 56 bytes RGB (900 px, rows of 90 from top-left), `03` EDITOR widget.
-Only 90x10 images display, every frame needs the full sequence, and the panel needs > 0.05 s
-after each frame: about 3.5 frames/s. Faster speeds move more pixels per frame.
+Windows **Settings → Apps → Installed apps → Matrix Ticker → Uninstall**.
+Your settings are in `%APPDATA%\MatrixTicker` if you want to remove them too.
 
-## Restore your NexLinq layout on exit
+## Credits
 
-Record NexLinq sending your loadout once, then save it:
+Scores from ESPN. Weather data by [Open-Meteo.com](https://open-meteo.com) (free for non-commercial use).
+Not affiliated with Phanteks.
 
-```
-tshark -i \\.\USBPcap3 -w loadout.pcapng -a duration:15     (click Sent! in NexLinq while it records)
-python tools/save_layout.py loadout.pcapng default
-```
-
-Ctrl+C (or the end of `--once`) then replays `layouts/default.json`. `--no-restore` skips it.
-
-## Tuning
-
-`config.json` holds per-sport scroll scales. 1.0 is the tuned baseline; each 0.1 adds or
-removes a little time per page. `live_bonus` is added for in-progress games.
-
-```json
-{"scale": {"default": 1.0, "NFL": 0.9, "NBA": 1.0}, "live_bonus": 0.0}
-```
-
-Debug one sport: `python main.py --nba --once -v` (add `--speed-scale 1.1` to try a value).
-
-## Roadmap
-
-- Full color (team colors, gray separators, red F): investigate the Creator EDITOR widget,
-  which likely sends pixel data. The text widget only supports one color per page.
-- Cycle content: sports ticker, weather (National Weather Service API), maybe local concerts.
-- Cycle through layouts saved in NexLinq (replay their captured upload sequences) between tickers.
-- GUI for easy customization.
-- Public release: GitHub repo, setup docs, share with other Matrix case owners.
-
-## Building the installer
-
-Push a tag like `v0.2.0` and GitHub Actions (`.github/workflows/build.yml`) builds the app with
-PyInstaller, packs it with Inno Setup, and attaches `MatrixTicker-Setup-0.2.0.exe` to a release.
+For running from source, command-line options, and how the display's USB protocol was worked out,
+see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
