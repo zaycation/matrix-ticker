@@ -37,7 +37,7 @@ GLYPHS = {
 
 # 7x7 colored icons, stored under private-use characters so they can sit in text.
 PALETTE = {"y": (255, 200, 0), "w": (220, 220, 220), "b": (60, 140, 255),
-           "c": (190, 225, 255), "g": (140, 140, 140)}
+           "c": (190, 225, 255), "g": (140, 140, 140), "m": (240, 230, 170)}
 ICON_ROWS = {
     "sun":    ["y..y..y", ".y...y.", "..yyy..", "y.yyy.y", "..yyy..", ".y...y.", "y..y..y"],
     "partly": ["y.y....", ".yyy...", "yyy.ww.", ".y.wwww", "..wwwww", "..wwwww", "......."],
@@ -46,6 +46,8 @@ ICON_ROWS = {
     "snow":   ["..www..", ".wwwww.", "wwwwwww", ".......", ".c.c.c.", "..c.c..", ".c.c.c."],
     "storm":  ["..www..", ".wwwww.", "wwwwwww", "...y...", "..yy...", "...y...", "..y...."],
     "fog":    [".......", "ggggggg", ".......", ".gggggg", ".......", "ggggg..", "......."],
+    "moon":   ["..mmm..", ".mm....", "mm.....", "mm.....", "mm.....", ".mm....", "..mmm.."],
+    "moonpartly": ["mm.....", ".mm....", "mm.ww..", "m.wwww.", "..wwwww", "..wwwww", "......."],
 }
 ICON_CHAR = {name: chr(0xE000 + i) for i, name in enumerate(ICON_ROWS)}
 ICONS = {ICON_CHAR[name]: rows for name, rows in ICON_ROWS.items()}

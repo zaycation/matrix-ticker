@@ -27,6 +27,7 @@ class Settings:
     leagues: list = field(default_factory=lambda: list(ITEMS))
     location: str = ""             # weather: city, ZIP, "91367, US" or "lat,lon"
     units: str = "F"               # weather: F or C
+    weather_mode: str = "daily"    # weather: "daily" (5 days) or "hourly" (next 5 hours)
     loop: bool = True
     verbose: bool = False
     step: int = 4                  # pixels moved per frame
@@ -101,7 +102,7 @@ class ScrollTicker:
                     self.log("Weather: no location set, skipping.")
                 return None
             try:
-                segs = weather.segments(self.s.location, self.s.units)
+                segs = weather.segments(self.s.location, self.s.units, self.s.weather_mode)
             except Exception as e:
                 self.log(f"Weather: {e}")
                 return None

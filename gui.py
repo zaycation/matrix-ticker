@@ -102,7 +102,7 @@ class App:
         self.logq, self._save_job = queue.Queue(), None
 
         saved = load_cfg().get("gui", {})
-        for key in ("speed", "padding", "brightness", "loop", "location", "units"):
+        for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
@@ -157,8 +157,13 @@ class App:
                  highlightcolor=SLIDER).pack(side="left", ipady=3)
         self.celsius = tk.BooleanVar(value=self.settings.units == "C")
         self._check(loc, "°C", self.celsius, self._location_changed).pack(side="left", padx=(8, 0))
-        tk.Label(loc, text="City or ZIP, e.g. 91367", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(
-            side="left", padx=(8, 0))
+        self.wmode = tk.StringVar(value=self.settings.weather_mode)
+        for value, text in (("daily", "5 days"), ("hourly", "5 hours")):
+            tk.Radiobutton(loc, text=text, value=value, variable=self.wmode, command=self._location_changed,
+                           bg=PANEL, fg=FG, selectcolor=TROUGH, activebackground=PANEL, activeforeground=FG,
+                           highlightthickness=0, bd=0, font=FONT).pack(side="left", padx=(8, 0))
+        tk.Label(box2, text="City or ZIP, e.g. 91367", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).grid(
+            row=3, column=2, columnspan=2, sticky="e", pady=(6, 0))
         tk.Label(box2, text="Options", bg=PANEL, fg=MUTED, font=FONT).grid(row=5, column=0, sticky="w", pady=(6, 0))
         self.loop = tk.BooleanVar(value=self.settings.loop)
         self.close_nexlinq = tk.BooleanVar(value=saved.get("close_nexlinq", True))
@@ -234,6 +239,7 @@ class App:
     def _location_changed(self):
         self.settings.location = self.location.get()
         self.settings.units = "C" if self.celsius.get() else "F"
+        self.settings.weather_mode = self.wmode.get()
         self._schedule_save()
 
     def _opts_changed(self):
@@ -252,7 +258,8 @@ class App:
         s = self.settings
         cfg["gui"] = {"speed": s.speed, "padding": s.padding, "brightness": s.brightness,
                       "leagues": s.leagues, "loop": s.loop, "close_nexlinq": self.close_nexlinq.get(),
-                      "location": s.location, "units": s.units, "autorun": self.autorun.get()}
+                      "location": s.location, "units": s.units, "weather_mode": s.weather_mode,
+                      "autorun": self.autorun.get()}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 
@@ -267,6 +274,8 @@ class App:
         self.close_nexlinq.set(True)
         self.autorun.set(False)
         self.celsius.set(False)
+        self.wmode.set("daily")
+        self._location_changed()
         self._leagues_changed()
         self._opts_changed()
         self.log("Settings reset to defaults.")

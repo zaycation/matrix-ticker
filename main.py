@@ -175,6 +175,7 @@ def run_scroll(panel, args, leagues):
     settings = Settings(speed=args.speed, step=args.step, brightness=args.brightness,
                         padding=len(args.sep), leagues=leagues, loop=not args.once,
                         location=args.location, units="C" if args.celsius else "F",
+                        weather_mode="hourly" if args.hourly else "daily",
                         verbose=args.verbose, league_gap=args.league_gap)
     source = (lambda lg: DEMO.get(lg, [])) if args.demo else None
     if panel:
@@ -229,6 +230,7 @@ def main():
                     help="include the weather forecast (scroll style; needs --location)")
     ap.add_argument("--location", default="", help='weather location: city, ZIP, "91367, US" or "lat,lon"')
     ap.add_argument("--celsius", action="store_true", help="weather in Celsius")
+    ap.add_argument("--hourly", action="store_true", help="weather: now + next 5 hours instead of 5 days")
     args = ap.parse_args()
 
     panel = None

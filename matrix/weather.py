@@ -1,5 +1,8 @@
 """Weather from Open-Meteo (free, no API key, non-commercial use; credit: Open-Meteo.com).
 
+Two views: "daily" = now + today and the next 4 days (highs only);
+"hourly" = now + the next 5 hours. Both come from one cached request.
+
 Location can be a city ("Woodland Hills"), a postal code ("91367"), either with a
 country/state after a comma ("91367, US"), or "lat,lon". It's looked up once and cached.
 Forecasts refresh at most every 15 minutes.
@@ -29,7 +32,7 @@ WMO = {
     85: ("SNOW SHOWERS", "snow"), 86: ("SNOW SHOWERS", "snow"),
     95: ("STORMS", "storm"), 96: ("STORMS", "storm"), 99: ("STORMS", "storm"),
 }
-LABEL, HIGH, LOW, RAIN = (80, 200, 255), (255, 150, 40), (90, 170, 255), (60, 140, 255)
+LABEL, HIGH, RAIN = (80, 200, 255), (255, 150, 40), (60, 140, 255)
 
 _geo_cache, _wx_cache = {}, {}
 
@@ -76,8 +79,9 @@ def forecast(location, units="F"):
         return name, cached[1]
     data = _get(FORECAST_URL, {
         "latitude": lat, "longitude": lon,
-        "current": "temperature_2m,weather_code",
-        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+        "current": "temperature_2m,weather_code,is_day",
+        "daily": "weather_code,temperature_2m_max,precipitation_probability_max",
+        "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
         "temperature_unit": "fahrenheit" if units == "F" else "celsius",
         "timezone": "auto", "forecast_days": 5,
     })
@@ -85,24 +89,47 @@ def forecast(location, units="F"):
     return name, data
 
 
-def _icon(code):
-    return WMO.get(int(code), ("", "cloud"))[1] if code is not None else "cloud"
+def _icon(code, is_day=1):
+    name = WMO.get(int(code), ("", "cloud"))[1] if code is not None else "cloud"
+    if not is_day:                     # no sun at night
+        name = {"sun": "moon", "partly": "moonpartly"}.get(name, name)
+    return name
 
 
-def segments(location, units="F"):
-    """Colored segments for the scroll ticker: NOW + today + next 4 days."""
+def _hour_label(iso):
+    h = int(iso[11:13])
+    return f"{h % 12 or 12}{'AM' if h < 12 else 'PM'}"
+
+
+def _rain(segs, pct):
+    if pct is not None and pct >= 20:
+        segs.append((f" {round(pct)}%", RAIN))
+
+
+def segments(location, units="F", mode="daily"):
+    """Colored segments for the scroll ticker.
+    daily: NOW + today and the next 4 days.  hourly: NOW + the next 5 hours."""
     name, d = forecast(location, units)
-    cur, daily = d.get("current", {}), d.get("daily", {})
+    cur = d.get("current", {})
     segs = [(name.upper(), LABEL), (" : ", style.GRAY), ("NOW ", style.GRAY),
-            (font.ICON_CHAR[_icon(cur.get("weather_code"))], None),
+            (font.ICON_CHAR[_icon(cur.get("weather_code"), cur.get("is_day", 1))], None),
             (f" {round(cur.get('temperature_2m', 0))}°", style.WHITE)]
-    days = daily.get("time", [])
-    for i, day in enumerate(days[:5]):
+    gap = ("     ", style.WHITE)
+    if mode == "hourly":
+        h = d.get("hourly", {})
+        times = h.get("time", [])
+        now_hour = (cur.get("time") or "")[:13]          # e.g. "2026-11-17T17"
+        start = next((i for i, t in enumerate(times) if t[:13] == now_hour), 0)
+        for i in range(start + 1, min(start + 6, len(times))):
+            segs += [gap, (_hour_label(times[i]) + " ", style.GRAY),
+                     (font.ICON_CHAR[_icon(h["weather_code"][i], h.get("is_day", [1] * len(times))[i])], None),
+                     (f" {round(h['temperature_2m'][i])}°", style.WHITE)]
+            _rain(segs, (h.get("precipitation_probability") or [None] * len(times))[i])
+        return segs
+    daily = d.get("daily", {})
+    for i, day in enumerate(daily.get("time", [])[:5]):
         label = "TODAY" if i == 0 else dt.date.fromisoformat(day).strftime("%a").upper()
-        hi, lo = daily["temperature_2m_max"][i], daily["temperature_2m_min"][i]
-        rain = (daily.get("precipitation_probability_max") or [None] * 5)[i]
-        segs += [("     ", style.WHITE), (label + " ", style.GRAY), (font.ICON_CHAR[_icon(daily["weather_code"][i])], None),
-                 (f" {round(hi)}°", HIGH), (f" {round(lo)}°", LOW)]
-        if rain is not None and rain >= 20:
-            segs.append((f" {round(rain)}%", RAIN))
+        segs += [gap, (label + " ", style.GRAY), (font.ICON_CHAR[_icon(daily["weather_code"][i])], None),
+                 (f" {round(daily['temperature_2m_max'][i])}°", HIGH)]
+        _rain(segs, (daily.get("precipitation_probability_max") or [None] * 5)[i])
     return segs
