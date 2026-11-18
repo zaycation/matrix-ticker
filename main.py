@@ -182,7 +182,10 @@ def run_scroll(panel, args, leagues):
         ScrollTicker(panel, settings, games_source=source).run()
     else:
         print("\x1b[2J", end="")
-        ScrollTicker(None, settings, log=lambda m: None, games_source=source, show=render.preview).run()
+
+        def log_below(msg):   # messages go on a line under the 10-row preview
+            print(f"\x1b[12;1H\x1b[K{msg}", flush=True)
+        ScrollTicker(None, settings, log=log_below, games_source=source, show=render.preview).run()
 
 
 def restore(panel):

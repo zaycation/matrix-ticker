@@ -78,6 +78,16 @@ class ScrollTicker:
         self.games_source = games_source or scores.games
         self.show = show or self._send
 
+    def _wait(self, seconds):
+        """Sleep in short steps: Event.wait() can't be interrupted by Ctrl+C on Windows,
+        time.sleep() can. Stops early if stop is set."""
+        end = time.perf_counter() + max(0.0, seconds)
+        while not self.stop.is_set():
+            left = end - time.perf_counter()
+            if left <= 0:
+                return
+            time.sleep(min(0.1, left))
+
     def _send(self, buf):
         ok, msg = self.panel.show_bitmap(buf)
         if not ok:
@@ -132,11 +142,11 @@ class ScrollTicker:
                     # If the speed asks for more than step px per achievable frame, move further per frame.
                     speed = max(1.0, self.s.speed)
                     step = max(self.s.step, math.ceil(speed * (upload + MIN_GAP)))
-                    self.stop.wait(max(MIN_GAP, step / speed - upload))
+                    self._wait(max(MIN_GAP, step / speed - upload))
                     offset += step
-                self.stop.wait(self.s.league_gap)
+                self._wait(self.s.league_gap)
             if not self.s.loop:
                 return
             if not shown_any:
                 self.log("Nothing to show right now in the selected items; checking again in 60 s.")
-                self.stop.wait(60)
+                self._wait(60)
