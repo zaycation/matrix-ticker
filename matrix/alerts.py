@@ -25,12 +25,14 @@ GOLD, WIN_GREEN = (255, 200, 0), (0, 220, 80)
 
 @dataclass
 class Alert:
-    word: str            # e.g. "TOUCHDOWN"
-    color: tuple         # color of the word
-    game: dict           # the game as it is now
+    word: str              # e.g. "TOUCHDOWN"
+    color: tuple           # color of the word
+    game: dict = None      # the game as it is now (score alerts)
+    lines: tuple = None    # or: ready-made screens, each a list of (text, rgb) segments
+    log_text: str = None
 
     def text(self):
-        return f"{self.word}: {score_line(self.game)}"
+        return self.log_text or f"{self.word}: {score_line(self.game)}"
 
 
 def _int(v):
@@ -94,6 +96,8 @@ def diff(old, new, terms, closed):
 
 def frames(alert):
     """Two screens to alternate: the event (star + word) and the score."""
+    if alert.lines:
+        return tuple(render.centered(segs) for segs in alert.lines)
     word = render.centered([(ICON_CHAR["star"], None), ("  " + alert.word, alert.color)])
     g = alert.game
     if g.get("tennis") or g["state"] == "pre":

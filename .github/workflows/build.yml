@@ -26,6 +26,13 @@ jobs:
       - name: Make icon
         run: python packaging/make_icon.py
 
+      - name: Stamp version
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}"
+          if ($v -like "v*") { $v = $v.Substring(1) } else { $v = "dev" }
+          Set-Content matrix/version.py "__version__ = `"$v`""
+
       - name: Build app (PyInstaller)
         run: >
           pyinstaller --noconfirm --windowed --name MatrixTicker

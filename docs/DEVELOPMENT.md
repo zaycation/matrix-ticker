@@ -23,7 +23,8 @@ Sport flags: `--nfl --nba --mlb --wnba --ncaaw --atp --wta --weather` (combine t
 Screens: `--dashboard --calendar --counter --nowplaying`, `--screen-seconds 10`, `--24h`.
 Preview example: `python main.py --style scroll --preview --dashboard --calendar --counter`.
 Scroll style: `--speed` (px/s), `--step`, `--brightness`, `--league-gap`, `--sep`.
-Weather: `--location`, `--hourly`, `--count N`, `--celsius`. Ctrl+C stops and restores `layouts/default.json`.
+Weather: `--location`, `--hourly`, `--count N`, `--celsius`.
+Favorites/alerts: `--favorites "Bears, 76ers"`, `--only-favorites`, `--no-alerts`. Fantasy: `--fantasy --sleeper USER [--sleeper-league NAME]`. Ctrl+C stops and restores `layouts/default.json`.
 
 Text style only (the original single-color ticker using the panel's text widget):
 `--calibrate`, `--speed-scale`, `--page-buffer`, `config.json` `scale` / `live_bonus`.

@@ -13,13 +13,15 @@ import queue
 import sys
 import threading
 import tkinter as tk
+import webbrowser
 from tkinter import filedialog
 
 import customtkinter as ctk
 
-from matrix import nexlinq
+from matrix import nexlinq, updates
 from matrix.counter import Counter
-from matrix.ticker import COUNTER, ITEMS, ScrollTicker, Settings, restore_layout
+from matrix.ticker import COUNTER, FANTASY, ITEMS, ScrollTicker, Settings, restore_layout
+from matrix.version import __version__
 
 try:
     import pystray
@@ -89,7 +91,7 @@ class App:
         saved = load_cfg().get("gui", {})
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
                     "weather_count", "screen_seconds", "clock_24h", "cpu_meter", "gpu_meter",
-                    "favorites", "favorites_only", "alerts"):
+                    "favorites", "favorites_only", "alerts", "sleeper_user", "sleeper_league"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
@@ -116,6 +118,16 @@ class App:
                                    fg_color=CARD, corner_radius=12, padx=10, height=26)
         self.status.pack(side="right")
 
+        # update banner (hidden until a newer release is found)
+        self.update_bar = ctk.CTkFrame(outer, fg_color="#1d3a2a", corner_radius=10)
+        self.update_text = ctk.CTkLabel(self.update_bar, text="", text_color=FG, font=font(12))
+        self.update_text.pack(side="left", padx=12, pady=6)
+        self._update_url = updates.RELEASES_PAGE
+        ctk.CTkButton(self.update_bar, text="Download", width=90, height=28, corner_radius=8, fg_color=GREEN,
+                      hover_color=GREEN_HI, text_color="white", font=font(12),
+                      command=lambda: webbrowser.open(self._update_url)).pack(side="right", padx=8, pady=6)
+        self.head = head
+
         # big run/stop toggle
         runrow = ctk.CTkFrame(outer, fg_color="transparent")
         runrow.pack(fill="x", pady=(12, 4))
@@ -129,13 +141,21 @@ class App:
         self._run_snapshot, self._restarting = None, False
 
         # sliders
-        box = self._card(outer, "Ticker")
+        # two columns keep the window short enough for a 1080p screen
+        cols = ctk.CTkFrame(outer, fg_color="transparent")
+        cols.pack(fill="x")
+        left = ctk.CTkFrame(cols, fg_color="transparent")
+        left.pack(side="left", fill="y", anchor="n")
+        right = ctk.CTkFrame(cols, fg_color="transparent")
+        right.pack(side="left", fill="y", anchor="n", padx=(12, 0))
+
+        box = self._card(left, "Ticker")
         self.vars = {}
         for r, (attr, label, lo, hi, step, cast) in enumerate(self.SLIDERS, start=1):
             self._slider(box, r, attr, label, lo, hi, step, cast)
 
         # what to show
-        box2 = self._card(outer, "Show")
+        box2 = self._card(left, "Show")
         grid = ctk.CTkFrame(box2, fg_color="transparent")
         grid.grid(row=1, column=0, columnspan=3, sticky="w")
         self.league_vars = {}
@@ -163,7 +183,7 @@ class App:
         self._switch(fsw, "Big-moment alerts", self.alerts_on, self._favorites_changed).pack(side="left")
 
         # weather
-        box_w = self._card(outer, "Weather")
+        box_w = self._card(left, "Weather")
         # no textvariable: customtkinter only shows the placeholder hint without one
         self.location = ctk.CTkEntry(box_w, placeholder_text="City or ZIP, e.g. 91367", width=170, height=32,
                                      corner_radius=8, fg_color=FIELD, border_width=0, text_color=FG,
@@ -186,7 +206,7 @@ class App:
         box_w.columnconfigure(1, weight=1)
 
         # options
-        box_o = self._card(outer, "Options")
+        box_o = self._card(right, "Options")
         self.loop = tk.BooleanVar(value=self.settings.loop)
         self.autorun = tk.BooleanVar(value=saved.get("autorun", False))
         self.h24 = tk.BooleanVar(value=self.settings.clock_24h)
@@ -210,8 +230,17 @@ class App:
         ctk.CTkLabel(meters, text="GPU", text_color=MUTED, font=font(12)).pack(side="left", padx=(12, 4))
         self._dropdown(meters, self.gpu_meter, list(self.GPU_METERS), 128, self._meters_changed).pack(side="left")
 
+        # fantasy (only shown when FANTASY is ticked)
+        self.fantasy_box = box_f = self._card(right, "Fantasy (Sleeper)", pack=False)
+        self.sleeper_user = self._hint_entry(box_f, "Sleeper username", self.settings.sleeper_user, 160)
+        self.sleeper_user.grid(row=1, column=0, sticky="w")
+        self.sleeper_league = self._hint_entry(box_f, "League name (blank = all)", self.settings.sleeper_league, 200)
+        self.sleeper_league.grid(row=1, column=1, sticky="w", padx=(8, 0))
+        ctk.CTkLabel(box_f, text="Shows your matchup score; with alerts on, flashes starters' big plays (+3 pts).",
+                     text_color=MUTED, font=font(11)).grid(row=2, column=0, columnspan=4, sticky="w", pady=(4, 0))
+
         # counter (only shown when COUNTER is ticked)
-        self.counter_box = box3 = self._card(outer, "Counter", pack=False)
+        self.counter_box = box3 = self._card(right, "Counter", pack=False)
         self.count_label = ctk.CTkLabel(box3, text=str(self.counter.count), text_color=GOLD,
                                         font=font(26, "bold"), width=70, anchor="e")
         self.count_label.grid(row=0, column=3, rowspan=2, sticky="ne")
@@ -233,7 +262,7 @@ class App:
         box3.columnconfigure(3, weight=1)
 
         # bottom buttons
-        self.small = small = ctk.CTkFrame(outer, fg_color="transparent")
+        self.small = small = ctk.CTkFrame(right, fg_color="transparent")
         small.pack(fill="x", pady=(10, 0))
         for i, (text, cmd) in enumerate((("Quit", self.quit), ("Reset", self.reset_defaults),
                                          ("Launch NexLinq", self.launch_nexlinq))):
@@ -242,15 +271,17 @@ class App:
             small.columnconfigure(i, weight=1, uniform="b")
 
         # log
-        self.logbox = ctk.CTkTextbox(outer, height=74, fg_color=CARD, text_color=MUTED, corner_radius=12,
+        self.logbox = ctk.CTkTextbox(right, height=74, fg_color=CARD, text_color=MUTED, corner_radius=12,
                                      font=ctk.CTkFont(family="Consolas", size=12), wrap="word",
                                      state="disabled", activate_scrollbars=True)
-        self.logbox.pack(fill="x", pady=(10, 0))
-        ctk.CTkLabel(outer, text="Scores: ESPN  ·  Weather data by Open-Meteo.com", text_color=MUTED,
+        self.logbox.pack(fill="both", expand=True, pady=(10, 0))
+        ctk.CTkLabel(outer, text=f"v{__version__}  ·  Scores: ESPN  ·  Fantasy: Sleeper  ·  Weather: Open-Meteo.com",
+                     text_color=MUTED,
                      font=font(10)).pack(anchor="e", pady=(4, 0))
 
         self._show_counter_box()
         self._opacity_changed()
+        self._check_updates()
         err = self.counter.listen()
         if err:
             self.log(err)
@@ -366,12 +397,52 @@ class App:
         self._location_changed()
 
     def _show_counter_box(self):
-        card = self.counter_box.card
-        if self.league_vars[COUNTER].get():
-            if not card.winfo_manager():
-                card.pack(fill="x", pady=(8, 0), before=self.small)
-        else:
-            card.pack_forget()
+        """Fantasy and counter settings only show when their item is ticked (in that order)."""
+        cards = [(self.fantasy_box.card, FANTASY), (self.counter_box.card, COUNTER)]
+        wanted = [c for c, item in cards if self.league_vars[item].get()]
+        if [c for c, _ in cards if c.winfo_manager()] == wanted:
+            return
+        for c, _ in cards:
+            c.pack_forget()
+        for c in wanted:
+            c.pack(fill="x", pady=(8, 0), before=self.small)
+
+    def _hint_entry(self, parent, hint, value, width):
+        e = ctk.CTkEntry(parent, placeholder_text=hint, width=width, height=30, corner_radius=8, fg_color=FIELD,
+                         border_width=0, text_color=FG, placeholder_text_color=MUTED, font=font())
+        if value:
+            e.insert(0, value)
+        for ev in ("<KeyRelease>", "<FocusOut>"):
+            e.bind(ev, lambda _e: self._fantasy_changed())
+        return e
+
+    def _fantasy_changed(self):
+        self.settings.sleeper_user = self.sleeper_user.get().strip()
+        self.settings.sleeper_league = self.sleeper_league.get().strip()
+        self._schedule_save()
+
+    def _check_updates(self):
+        """Ask GitHub for a newer release now and once a day (installed app only)."""
+        def work():
+            found = updates.check()
+            if found:
+                self.cmdq.put(lambda: self._show_update(*found))
+        if updates.parse(__version__):
+            threading.Thread(target=work, daemon=True).start()
+        self.root.after(24 * 3600 * 1000, self._check_updates)
+
+    def _show_update(self, version, url):
+        self._update_url = url
+        self.update_text.configure(text=f"Version {version} is available  (you have {__version__})")
+        if not self.update_bar.winfo_manager():
+            self.update_bar.pack(fill="x", pady=(10, 0), after=self.head)
+            self.log(f"Update available: {version}. Click Download.")
+            if self.tray:
+                try:
+                    self.tray.notify(f"Version {version} is available. Open Matrix Ticker to download it.",
+                                     "Matrix Ticker update")
+                except Exception:
+                    pass
 
     def _opacity_changed(self, v=None):
         v = self.opacity.get() if v is None else v
@@ -449,7 +520,8 @@ class App:
                       "autorun": self.autorun.get(), "screen_seconds": s.screen_seconds,
                       "clock_24h": s.clock_24h, "opacity": self.opacity.get(),
                       "cpu_meter": s.cpu_meter, "gpu_meter": s.gpu_meter,
-                      "favorites": s.favorites, "favorites_only": s.favorites_only, "alerts": s.alerts}
+                      "favorites": s.favorites, "favorites_only": s.favorites_only, "alerts": s.alerts,
+                      "sleeper_user": s.sleeper_user, "sleeper_league": s.sleeper_league}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 

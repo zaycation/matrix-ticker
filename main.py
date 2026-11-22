@@ -30,7 +30,7 @@ import sys
 import time
 
 from matrix import render, scores
-from matrix.ticker import CALENDAR, COUNTER, DASHBOARD, NOWPLAYING, WEATHER, ScrollTicker, Settings
+from matrix.ticker import CALENDAR, COUNTER, DASHBOARD, FANTASY, NOWPLAYING, WEATHER, ScrollTicker, Settings
 
 TEXT_MAX = 50
 LIVE, FINAL, UPCOMING, INFO = (0, 255, 80), (170, 170, 170), (255, 255, 255), (80, 160, 255)
@@ -178,7 +178,7 @@ def run_scroll(panel, args, leagues):
                         weather_mode="hourly" if args.hourly else "daily", weather_count=args.count,
                         screen_seconds=args.screen_seconds, clock_24h=args.h24,
                         cpu_meter=args.cpu_meter, gpu_meter=args.gpu_meter,
-                        favorites=args.favorites, favorites_only=args.only_favorites, alerts=not args.no_alerts,
+                        favorites=args.favorites, sleeper_user=args.sleeper, sleeper_league=args.sleeper_league, favorites_only=args.only_favorites, alerts=not args.no_alerts,
                         verbose=args.verbose, league_gap=args.league_gap)
     source = (lambda lg: DEMO.get(lg, [])) if args.demo else None
     from matrix.counter import Counter
@@ -235,7 +235,7 @@ def main():
     ap.add_argument("--weather", dest="only", action="append_const", const=WEATHER,
                     help="include the weather forecast (scroll style; needs --location)")
     for flag, item in (("--dashboard", DASHBOARD), ("--calendar", CALENDAR), ("--counter", COUNTER),
-                       ("--nowplaying", NOWPLAYING)):
+                       ("--nowplaying", NOWPLAYING), ("--fantasy", FANTASY)):
         ap.add_argument(flag, dest="only", action="append_const", const=item,
                         help=f"include the {item.lower()} screen (scroll style)")
     ap.add_argument("--screen-seconds", type=float, default=10.0, help="seconds per static screen")
@@ -243,6 +243,8 @@ def main():
     ap.add_argument("--location", default="", help='weather location: city, ZIP, "91367, US" or "lat,lon"')
     ap.add_argument("--celsius", action="store_true", help="weather in Celsius")
     ap.add_argument("--hourly", action="store_true", help="weather: hours ahead instead of days ahead")
+    ap.add_argument("--sleeper", default="", help="Sleeper username for --fantasy")
+    ap.add_argument("--sleeper-league", default="", help="only Sleeper leagues whose name contains this")
     ap.add_argument("--favorites", default="", help='favorite teams, e.g. "Bears, Sparks" (listed first, starred)')
     ap.add_argument("--only-favorites", action="store_true", help="show only games with a favorite team")
     ap.add_argument("--no-alerts", action="store_true", help="no big-moment alerts for favorite teams")
@@ -277,7 +279,7 @@ def main():
 
         while True:
             for league in leagues:
-                if league in (WEATHER, NOWPLAYING, DASHBOARD, CALENDAR, COUNTER):
+                if league in (WEATHER, NOWPLAYING, DASHBOARD, CALENDAR, COUNTER, FANTASY):
                     continue               # these need the full-color scroll style
                 try:
                     games = DEMO.get(league, []) if args.demo else scores.games(league)

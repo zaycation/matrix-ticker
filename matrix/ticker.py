@@ -11,16 +11,16 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from . import alerts, favorites, render, scores, screens, style, weather
+from . import alerts, favorites, render, scores, screens, sleeper, style, weather
 from .font import ICON_CHAR
 
 from .paths import RESTORE_FILE
 MIN_GAP = 0.15          # the panel needs > 0.05 s after each frame; 0.15 s is proven
 STATE_ORDER = {"in": 0, "post": 1, "pre": 2}
-WEATHER, NOWPLAYING = "WEATHER", "NOW PLAYING"
+WEATHER, NOWPLAYING, FANTASY = "WEATHER", "NOW PLAYING", "FANTASY"
 DASHBOARD, CALENDAR, COUNTER = "DASHBOARD", "CALENDAR", "COUNTER"
 SCREENS = [DASHBOARD, CALENDAR, COUNTER]            # static screens, shown for screen_seconds
-ITEMS = list(scores.ALL) + [WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
+ITEMS = list(scores.ALL) + [FANTASY, WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
 FLASH_SECONDS = 3.0
 
 
@@ -38,7 +38,9 @@ class Settings:
     clock_24h: bool = False
     favorites: str = ""            # favorite teams, e.g. "Bears, Sparks" (see matrix/favorites.py)
     favorites_only: bool = False   # sports: show only games with a favorite team
-    alerts: bool = True            # flash big moments for favorite teams
+    alerts: bool = True            # flash big moments for favorite teams (and fantasy big plays)
+    sleeper_user: str = ""         # Sleeper username for FANTASY
+    sleeper_league: str = ""       # only leagues whose name contains this ("" = all your leagues)
     cpu_meter: str = "load"        # dashboard top meter: load, ram
     gpu_meter: str = "temp"        # dashboard bottom meter: temp, load, vram, power, fan
     loop: bool = True
@@ -186,6 +188,23 @@ class ScrollTicker:
             cols = render.strip(segs)
             self.log("Now playing" + (f", {len(cols)} px" if self.s.verbose else ""))
             return cols
+        if item == FANTASY:
+            if not self.s.sleeper_user.strip():
+                if self.s.verbose:
+                    self.log("Fantasy: no Sleeper username set, skipping.")
+                return None
+            try:
+                segs = sleeper.segments(self.s.sleeper_user, self.s.sleeper_league)
+            except Exception as e:
+                self.log(f"Fantasy: {e}")
+                return None
+            if not segs:
+                if self.s.verbose:
+                    self.log("Fantasy: no matchup this week")
+                return None
+            cols = render.strip(segs)
+            self.log("Fantasy" + (f", {len(cols)} px" if self.s.verbose else ""))
+            return cols
         if item == WEATHER:
             if not self.s.location.strip():
                 if self.s.verbose:
@@ -218,6 +237,7 @@ class ScrollTicker:
 
     def run(self):
         alerts.Watcher(self.s, self.push_alert, self.stop, self.games_source, self.log).start()
+        sleeper.Watcher(self.s, self.push_alert, self.stop, self.log).start()
         while not self.stop.is_set():
             shown_any = False
             for item in list(self.s.leagues):

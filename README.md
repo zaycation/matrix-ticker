@@ -58,6 +58,12 @@ Everything you change is saved. **Window opacity** (under Options) makes the win
 **Favorite teams:** type them under Show, like `Bears, Sparks` (team names or abbreviations).
 Turn on **Only my teams** to hide every other game. **Test alert** shows a sample on the display.
 
+**Fantasy football (Sleeper):** tick **FANTASY** and type your Sleeper username. Your matchup
+scrolls by (green when you're winning), and with alerts on, a starter's big play flashes up, like
+`J. ALLEN +6.4`. Type part of a league name to show just that league.
+
+**Updates:** the app checks for a new version once a day and shows a **Download** button when one is out.
+
 **Counter:** tick **COUNTER**, type a label (like `CHESTS`) and a key (like `f8`), then click **Set**.
 Press that key anytime to add one; the display shows the new count for a few seconds.
 
@@ -83,5 +89,5 @@ press Run (if it's open). You don't need it installed. Use **Launch NexLinq** to
 
 ---
 
-MIT licensed. Scores from ESPN. Weather by [Open-Meteo.com](https://open-meteo.com). Not affiliated with Phanteks.
+MIT licensed. Scores from ESPN. Fantasy from Sleeper. Weather by [Open-Meteo.com](https://open-meteo.com). Not affiliated with Phanteks.
 Developers: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).
