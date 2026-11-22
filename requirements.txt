@@ -2,6 +2,7 @@ hidapi>=0.14
 tzdata
 pystray>=0.19
 Pillow>=10
+customtkinter>=5.2
 psutil
 nvidia-ml-py
 pynput

@@ -50,7 +50,7 @@ That's it. It can start with Windows and sits quietly by the clock.
 3. For weather, type your city or ZIP code.
 4. Press the big green **Run** button.
 
-Everything you change is saved. Closing the window keeps it running in the
+Everything you change is saved. **Window opacity** (under Options) makes the window see-through. Closing the window keeps it running in the
 **system tray** (the little icons by the clock). Right-click that icon to stop it or quit.
 
 **Counter:** tick **COUNTER**, type a label (like `CHESTS`) and a key (like `f8`), then click **Set**.

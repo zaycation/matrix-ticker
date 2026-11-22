@@ -1,4 +1,4 @@
-"""Matrix Ticker control window. Dark, lightweight (tkinter, built into Python).
+"""Matrix Ticker control window. Modern dark look (customtkinter), see-through if you like.
 
     pythonw gui.py           # no console window
     pythonw gui.py --tray    # start hidden in the system tray (used at Windows startup)
@@ -8,16 +8,17 @@ Settings are saved to config.json under "gui".
 """
 import ctypes
 import json
-import os
 import queue
 import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog
 
-from matrix import nexlinq, scores
+import customtkinter as ctk
+
+from matrix import nexlinq
 from matrix.counter import Counter
-from matrix.ticker import COUNTER, ITEMS, WEATHER, ScrollTicker, Settings, restore_layout
+from matrix.ticker import COUNTER, ITEMS, ScrollTicker, Settings, restore_layout
 
 try:
     import pystray
@@ -27,10 +28,15 @@ except Exception:          # tray is optional when running from source
 
 from matrix.paths import CONFIG_FILE
 
-BG, PANEL, FG, MUTED = "#15171c", "#1e2128", "#e6e8eb", "#8b919c"
-TROUGH, SLIDER, ACCENT = "#2a2e37", "#6b8cff", "#3b4252"
+BG, CARD, FIELD, FG, MUTED = "#121418", "#1c1f26", "#272b34", "#e8eaee", "#8b919c"
+ACCENT, ACCENT_HI = "#6b8cff", "#8aa4ff"
+BUTTON, BUTTON_HI = "#2c313b", "#383e4a"
 GREEN, GREEN_HI, RED, RED_HI = "#1f9d55", "#25b864", "#c0392b", "#d9443a"
-FONT, FONT_B = ("Segoe UI", 10), ("Segoe UI", 10, "bold")
+GOLD = "#ffc800"
+FAMILY = "Segoe UI"
+DEFAULT_OPACITY = 94
+
+ctk.set_appearance_mode("dark")
 
 
 def load_cfg():
@@ -41,25 +47,10 @@ def load_cfg():
         return {}
 
 
-def dark_title_bar(root):
-    """Windows 10/11: ask for a dark title bar. Harmless elsewhere."""
-    if sys.platform != "win32":
-        return
-    try:
-        root.update()
-        hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
-        on = ctypes.c_int(1)
-        for attr in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (newer, older builds)
-            if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(on), 4) == 0:
-                break
-    except Exception:
-        pass
-
-
 def led_icon(size=32):
     """Small dark tile with a few colored 'LEDs', drawn in code (no image files)."""
     img = tk.PhotoImage(width=size, height=size)
-    img.put(PANEL, to=(0, 0, size, size))
+    img.put(CARD, to=(0, 0, size, size))
     colors = ["#ff3b3b", "#ffffff", "#25b864", "#6b8cff", "#ffc72c"]
     cell = size // 6
     for row in range(2, 4):
@@ -70,32 +61,21 @@ def led_icon(size=32):
     return img
 
 
-class FlatButton(tk.Label):
-    """Flat clickable label with hover color (lighter than tk.Button, styles fully)."""
-    def __init__(self, parent, text, command, bg=ACCENT, hover=None, font=FONT, **kw):
-        super().__init__(parent, text=text, bg=bg, fg=FG, font=font, cursor="hand2", **kw)
-        self.command, self.base, self.hover = command, bg, hover or self._lighter(bg)
-        self.bind("<Button-1>", lambda e: self.command())
-        self.bind("<Enter>", lambda e: self.configure(bg=self.hover))
-        self.bind("<Leave>", lambda e: self.configure(bg=self.base))
-
-    @staticmethod
-    def _lighter(hexcolor):
-        r, g, b = (int(hexcolor[i:i + 2], 16) for i in (1, 3, 5))
-        return "#%02x%02x%02x" % tuple(min(255, v + 25) for v in (r, g, b))
-
-    def set_style(self, text, bg, hover):
-        self.base, self.hover = bg, hover
-        self.configure(text=text, bg=bg)
+def font(size=13, weight="normal"):
+    return ctk.CTkFont(family=FAMILY, size=size, weight=weight)
 
 
 class App:
     SLIDERS = [  # attr, label, low, high, step, cast
-        ("speed", "Speed  (pixels/s)", 6, 48, 1, float),
-        ("padding", "Padding  (spaces)", 1, 15, 1, int),
-        ("brightness", "Brightness  (%)", 10, 100, 5, int),
-        ("screen_seconds", "Screen time  (s)", 3, 30, 1, int),
+        ("speed", "Speed", 6, 48, 1, float),
+        ("padding", "Padding", 1, 15, 1, int),
+        ("brightness", "Brightness", 10, 100, 5, int),
+        ("screen_seconds", "Screen time", 3, 30, 1, int),
     ]
+    UNITS = {"speed": " px/s", "padding": "", "brightness": "%", "screen_seconds": "s"}
+    WMODES = {"days": "daily", "hours": "hourly"}
+    WMODES_REV = {v: k for k, v in WMODES.items()}
+    COUNTS = {"daily": range(1, 15), "hourly": range(1, 25)}    # Open-Meteo gives 16 days ahead
 
     def __init__(self, root):
         self.root = root
@@ -115,186 +95,231 @@ class App:
         self.counter = Counter(on_change=self._counter_bumped)
 
         root.title("Matrix Ticker")
-        root.configure(bg=BG)
+        root.configure(fg_color=BG)
         root.resizable(False, False)
         self.icon = led_icon()
         root.iconphoto(True, self.icon)
+        root.after(300, lambda: root.iconphoto(True, self.icon))   # customtkinter sets its own at ~200 ms
 
-        outer = tk.Frame(root, bg=BG, padx=14, pady=12)
-        outer.pack()
+        outer = ctk.CTkFrame(root, fg_color="transparent")
+        outer.pack(padx=16, pady=14)
 
         # header
-        head = tk.Frame(outer, bg=BG)
+        head = ctk.CTkFrame(outer, fg_color="transparent")
         head.pack(fill="x")
-        tk.Label(head, text="Matrix Ticker", bg=BG, fg=FG, font=("Segoe UI", 13, "bold")).pack(side="left")
-        self.status = tk.Label(head, text="● Stopped", bg=BG, fg=MUTED, font=FONT)
+        ctk.CTkLabel(head, text="Matrix Ticker", text_color=FG, font=font(20, "bold")).pack(side="left")
+        self.status = ctk.CTkLabel(head, text="●  Stopped", text_color=MUTED, font=font(12),
+                                   fg_color=CARD, corner_radius=12, padx=10, height=26)
         self.status.pack(side="right")
 
         # big run/stop toggle
-        self.toggle = FlatButton(outer, "▶   Run", self.toggle_run, bg=GREEN, hover=GREEN_HI,
-                                 font=("Segoe UI", 14, "bold"), pady=10)
-        self.toggle.pack(fill="x", pady=(10, 12))
+        self.toggle = ctk.CTkButton(outer, text="▶   Run", command=self.toggle_run, height=50, corner_radius=14,
+                                    fg_color=GREEN, hover_color=GREEN_HI, text_color="white",
+                                    font=font(17, "bold"))
+        self.toggle.pack(fill="x", pady=(12, 4))
 
         # sliders
-        box = tk.Frame(outer, bg=PANEL, padx=12, pady=8)
-        box.pack(fill="x")
+        box = self._card(outer, "Ticker")
         self.vars = {}
-        for r, (attr, label, lo, hi, step, cast) in enumerate(self.SLIDERS):
+        for r, (attr, label, lo, hi, step, cast) in enumerate(self.SLIDERS, start=1):
             self._slider(box, r, attr, label, lo, hi, step, cast)
 
-        # sports + options
-        box2 = tk.Frame(outer, bg=PANEL, padx=12, pady=8)
-        box2.pack(fill="x", pady=(8, 0))
-        tk.Label(box2, text="Show", bg=PANEL, fg=MUTED, font=FONT).grid(row=0, column=0, sticky="w")
+        # what to show
+        box2 = self._card(outer, "Show")
+        grid = ctk.CTkFrame(box2, fg_color="transparent")
+        grid.grid(row=1, column=0, columnspan=3, sticky="w")
         self.league_vars = {}
         for i, lg in enumerate(ITEMS):
             v = tk.BooleanVar(value=lg in self.settings.leagues)
-            self._check(box2, lg, v, self._leagues_changed).grid(row=1 + i // 4, column=i % 4, sticky="w")
+            self._check(grid, lg, v, self._leagues_changed).grid(row=i // 4, column=i % 4, sticky="w",
+                                                                 padx=(0, 12), pady=3)
             self.league_vars[lg] = v
-        r0 = 1 + -(-len(ITEMS) // 4)                     # first row under the checkboxes
-        tk.Label(box2, text="Weather location", bg=PANEL, fg=MUTED, font=FONT).grid(
-            row=r0, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        loc = tk.Frame(box2, bg=PANEL)
-        loc.grid(row=r0 + 1, column=0, columnspan=4, sticky="w")
+
+        # weather
+        box_w = self._card(outer, "Weather")
         self.location = tk.StringVar(value=self.settings.location)
         self.location.trace_add("write", lambda *_: self._location_changed())
-        tk.Entry(loc, textvariable=self.location, width=26, bg=TROUGH, fg=FG, insertbackground=FG,
-                 relief="flat", font=FONT, highlightthickness=1, highlightbackground=TROUGH,
-                 highlightcolor=SLIDER).pack(side="left", ipady=3)
+        ctk.CTkEntry(box_w, textvariable=self.location, placeholder_text="City or ZIP, e.g. 91367",
+                     width=170, height=32, corner_radius=8, fg_color=FIELD, border_width=0, text_color=FG,
+                     font=font()).grid(row=1, column=0, sticky="w")
+        menus = ctk.CTkFrame(box_w, fg_color="transparent")
+        menus.grid(row=1, column=1, sticky="e", padx=(10, 0))
         self.units = tk.StringVar(value="°" + self.settings.units)
-        self._dropdown(loc, self.units, ["°F", "°C"], 3).pack(side="left", padx=(8, 0))
+        self._dropdown(menus, self.units, ["°F", "°C"], 62).pack(side="left")
         self.wcount = tk.StringVar(value=str(self.settings.weather_count))
-        self.count_menu = self._dropdown(loc, self.wcount, [], 2)
-        self.count_menu.pack(side="left", padx=(8, 0))
+        self.count_menu = self._dropdown(menus, self.wcount, ["5"], 58)
+        self.count_menu.pack(side="left", padx=(6, 0))
         self.wmode = tk.StringVar(value=self.WMODES_REV[self.settings.weather_mode])
-        self._dropdown(loc, self.wmode, list(self.WMODES), 5).pack(side="left", padx=(4, 0))
+        self._dropdown(menus, self.wmode, list(self.WMODES), 80, self._mode_changed).pack(side="left", padx=(6, 0))
         self._fill_counts()
-        for var in (self.units, self.wcount):
-            var.trace_add("write", lambda *_: self._location_changed())
-        self.wmode.trace_add("write", lambda *_: (self._fill_counts(), self._location_changed()))
-        tk.Label(box2, text="City or ZIP, e.g. 91367", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).grid(
-            row=r0, column=2, columnspan=2, sticky="e", pady=(6, 0))
-        tk.Label(box2, text="Options", bg=PANEL, fg=MUTED, font=FONT).grid(row=r0 + 2, column=0, sticky="w", pady=(6, 0))
+        box_w.columnconfigure(1, weight=1)
+
+        # options
+        box_o = self._card(outer, "Options")
         self.loop = tk.BooleanVar(value=self.settings.loop)
         self.autorun = tk.BooleanVar(value=saved.get("autorun", False))
-        self._check(box2, "Loop", self.loop, self._opts_changed).grid(row=r0 + 3, column=0, sticky="w")
-        self._check(box2, "Start the ticker when the app opens", self.autorun, self._schedule_save).grid(
-            row=r0 + 4, column=0, columnspan=4, sticky="w")
         self.h24 = tk.BooleanVar(value=self.settings.clock_24h)
-        self._check(box2, "24-hour clock", self.h24, self._opts_changed).grid(row=r0 + 5, column=0, columnspan=4, sticky="w")
+        sw = ctk.CTkFrame(box_o, fg_color="transparent")
+        sw.grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 2))
+        for text, var, cmd in (("Loop", self.loop, self._opts_changed),
+                               ("24-hour clock", self.h24, self._opts_changed),
+                               ("Run when the app opens", self.autorun, self._schedule_save)):
+            self._switch(sw, text, var, cmd).pack(side="left", padx=(0, 14))
+        self.opacity = tk.IntVar(value=int(saved.get("opacity", DEFAULT_OPACITY)))
+        self._row_slider(box_o, 2, "Window opacity", self.opacity, 60, 100, 1, "%", self._opacity_changed)
 
-        # counter
-        self.counter_slot = tk.Frame(outer, bg=BG)       # keeps the counter box's place in the layout
-        self.counter_slot.pack(fill="x")
-        self.counter_box = box3 = tk.Frame(outer, bg=PANEL, padx=12, pady=8)   # made after, so it's drawn on top
-        tk.Label(box3, text="Counter", bg=PANEL, fg=MUTED, font=FONT).grid(row=0, column=0, sticky="w")
-        self.count_label = tk.Label(box3, text=str(self.counter.count), bg=PANEL, fg="#ffc800",
-                                    font=("Segoe UI", 16, "bold"), width=5, anchor="e")
-        self.count_label.grid(row=0, column=3, rowspan=2, sticky="e")
-        tk.Label(box3, text="Label", bg=PANEL, fg=FG, font=FONT).grid(row=1, column=0, sticky="w")
+        # counter (only shown when COUNTER is ticked)
+        self.counter_box = box3 = self._card(outer, "Counter", pack=False)
+        self.count_label = ctk.CTkLabel(box3, text=str(self.counter.count), text_color=GOLD,
+                                        font=font(26, "bold"), width=70, anchor="e")
+        self.count_label.grid(row=0, column=3, rowspan=2, sticky="ne")
+        ctk.CTkLabel(box3, text="Label", text_color=FG, font=font()).grid(row=1, column=0, sticky="w", pady=3)
         self.c_label = tk.StringVar(value=self.counter.label)
         self.c_label.trace_add("write", lambda *_: self._counter_label())
-        self._entry(box3, self.c_label, 12).grid(row=1, column=1, sticky="w", padx=4)
-        tk.Label(box3, text="Shortcut", bg=PANEL, fg=FG, font=FONT).grid(row=2, column=0, sticky="w", pady=(4, 0))
+        self._entry(box3, self.c_label, 130).grid(row=1, column=1, sticky="w", padx=8, pady=3)
+        ctk.CTkLabel(box3, text="Shortcut", text_color=FG, font=font()).grid(row=2, column=0, sticky="w", pady=3)
         self.c_hotkey = tk.StringVar(value=self.counter.hotkey)
-        self._entry(box3, self.c_hotkey, 12).grid(row=2, column=1, sticky="w", padx=4, pady=(4, 0))
-        FlatButton(box3, "Set", self._set_hotkey, padx=8, pady=1, font=("Segoe UI", 9)).grid(
-            row=2, column=2, sticky="w", pady=(4, 0))
-        cb = tk.Frame(box3, bg=PANEL)
-        cb.grid(row=2, column=3, sticky="e", pady=(4, 0))
+        self._entry(box3, self.c_hotkey, 130).grid(row=2, column=1, sticky="w", padx=8, pady=3)
+        self._button(box3, "Set", self._set_hotkey, width=50, height=28).grid(row=2, column=2, sticky="w")
+        cb = ctk.CTkFrame(box3, fg_color="transparent")
+        cb.grid(row=2, column=3, sticky="e")
         for text, cmd in (("−1", lambda: self.counter.add(-1)), ("+1", lambda: self.counter.add(1)),
                           ("Reset", self.counter.reset)):
-            FlatButton(cb, text, cmd, padx=6, pady=1, font=("Segoe UI", 9)).pack(side="left", padx=1)
-        tk.Label(box3, text="e.g. ctrl+alt+c or f8 (works in games)", bg=PANEL, fg=MUTED,
-                 font=("Segoe UI", 8)).grid(row=3, column=1, columnspan=3, sticky="w", padx=4)
-        box3.columnconfigure(2, weight=1)
+            self._button(cb, text, cmd, width=36 if len(text) < 3 else 52, height=28).pack(side="left", padx=(4, 0))
+        ctk.CTkLabel(box3, text="e.g. ctrl+alt+c or f8 (works in games)", text_color=MUTED,
+                     font=font(11)).grid(row=3, column=1, columnspan=3, sticky="w", padx=8)
+        box3.columnconfigure(3, weight=1)
 
-        # small buttons
-        small = tk.Frame(outer, bg=BG)
+        # bottom buttons
+        self.small = small = ctk.CTkFrame(outer, fg_color="transparent")
         small.pack(fill="x", pady=(10, 0))
-        buttons = [("Quit", self.quit), ("Reset", self.reset_defaults), ("Launch NexLinq", self.launch_nexlinq)]
-        for i, (text, cmd) in enumerate(buttons):
-            FlatButton(small, text, cmd, bg=ACCENT, padx=8, pady=4, font=("Segoe UI", 9)).grid(
-                row=0, column=i, sticky="ew", padx=2, pady=2)
-        for c in range(3):
-            small.columnconfigure(c, weight=1)
+        for i, (text, cmd) in enumerate((("Quit", self.quit), ("Reset", self.reset_defaults),
+                                         ("Launch NexLinq", self.launch_nexlinq))):
+            self._button(small, text, cmd, height=34).grid(row=0, column=i, sticky="ew",
+                                                          padx=(0 if i == 0 else 4, 0))
+            small.columnconfigure(i, weight=1, uniform="b")
 
         # log
-        self.logbox = tk.Text(outer, height=7, width=58, bg=PANEL, fg=MUTED, insertbackground=FG,
-                              relief="flat", bd=0, highlightthickness=0, padx=8, pady=6,
-                              font=("Consolas", 9), state="disabled")
+        self.logbox = ctk.CTkTextbox(outer, height=74, fg_color=CARD, text_color=MUTED, corner_radius=12,
+                                     font=ctk.CTkFont(family="Consolas", size=12), wrap="word",
+                                     state="disabled", activate_scrollbars=True)
         self.logbox.pack(fill="x", pady=(10, 0))
-        tk.Label(outer, text="Scores: ESPN  ·  Weather data by Open-Meteo.com", bg=BG, fg=MUTED,
-                 font=("Segoe UI", 8)).pack(anchor="e", pady=(4, 0))
+        ctk.CTkLabel(outer, text="Scores: ESPN  ·  Weather data by Open-Meteo.com", text_color=MUTED,
+                     font=font(10)).pack(anchor="e", pady=(4, 0))
 
         self._show_counter_box()
+        self._opacity_changed()
         err = self.counter.listen()
         if err:
             self.log(err)
         root.protocol("WM_DELETE_WINDOW", self.hide_or_quit)
-        dark_title_bar(root)
         self._start_tray()
         root.after(200, self._poll)
         if self.autorun.get():
             root.after(800, self.toggle_run)
 
     # ---------- widgets ----------
-    WMODES = {"days": "daily", "hours": "hourly"}
-    WMODES_REV = {v: k for k, v in WMODES.items()}
-    COUNTS = {"daily": range(1, 15), "hourly": range(1, 25)}    # Open-Meteo gives 16 days ahead
+    def _card(self, parent, title, pack=True):
+        card = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=14)
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(fill="x", padx=14, pady=(8, 10))
+        ctk.CTkLabel(inner, text=title.upper(), text_color=MUTED, font=font(11, "bold"),
+                     height=18).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+        card.inner = inner
+        inner.card = card
+        if pack:
+            card.pack(fill="x", pady=(8, 0))
+        return inner
 
-    def _dropdown(self, parent, var, choices, width):
-        m = tk.OptionMenu(parent, var, *(choices or [""]))
-        m.configure(bg=TROUGH, fg=FG, activebackground=ACCENT, activeforeground=FG, relief="flat", bd=0,
-                    highlightthickness=0, font=FONT, width=width, indicatoron=True, padx=6, pady=2)
-        m["menu"].configure(bg=TROUGH, fg=FG, activebackground=SLIDER, activeforeground=FG, bd=0, font=FONT)
-        return m
-
-    def _fill_counts(self):
-        """The number dropdown offers 1-14 days or 1-24 hours, depending on the mode."""
-        counts = self.COUNTS[self.WMODES[self.wmode.get()]]
-        menu = self.count_menu["menu"]
-        menu.delete(0, "end")
-        for n in counts:
-            menu.add_command(label=str(n), command=lambda n=n: self.wcount.set(str(n)))
-        if int(self.wcount.get() or 5) not in counts:
-            self.wcount.set(str(counts[-1]))
-
-    def _show_counter_box(self):
-        if self.league_vars[COUNTER].get():
-            self.counter_box.pack(in_=self.counter_slot, fill="x", pady=(8, 0))
-        else:
-            self.counter_box.pack_forget()
-            self.counter_slot.configure(height=1)    # an emptied frame keeps its old size otherwise
-
-    def _slider(self, parent, row, attr, label, lo, hi, step, cast):
-        tk.Label(parent, text=label, bg=PANEL, fg=FG, font=FONT, width=17, anchor="w").grid(row=row, column=0, sticky="w")
-        var = tk.DoubleVar(value=getattr(self.settings, attr))
-        value = tk.Label(parent, text=str(cast(var.get())), bg=PANEL, fg=FG, font=FONT_B, width=5, anchor="e")
+    def _row_slider(self, parent, row, label, var, lo, hi, step, unit, on_change):
+        ctk.CTkLabel(parent, text=label, text_color=FG, font=font(), width=110, anchor="w").grid(
+            row=row, column=0, sticky="w")
+        value = ctk.CTkLabel(parent, text="", text_color=FG, font=font(13, "bold"), width=70, anchor="e")
 
         def changed(_=None):
-            v = cast(var.get())
-            value.configure(text=str(v))
-            setattr(self.settings, attr, v)
-            self._schedule_save()
+            v = round(var.get() / step) * step
+            v = int(v) if float(step).is_integer() else v
+            value.configure(text=f"{v}{unit}")
+            on_change(v)
 
-        scale = tk.Scale(parent, from_=lo, to=hi, resolution=step, orient="horizontal", variable=var,
-                         showvalue=0, length=230, width=8, sliderlength=16, bd=0, highlightthickness=0,
-                         sliderrelief="flat", bg=SLIDER, activebackground="#8fa8ff", troughcolor=TROUGH,
-                         command=changed)
-        scale.grid(row=row, column=1, padx=6, pady=6)
-        value.grid(row=row, column=2, sticky="e")
+        slider = ctk.CTkSlider(parent, from_=lo, to=hi, number_of_steps=int(round((hi - lo) / step)),
+                               variable=var, command=changed, width=290, height=16,
+                               fg_color=FIELD, progress_color=ACCENT, button_color=ACCENT,
+                               button_hover_color=ACCENT_HI)
+        slider.grid(row=row, column=1, columnspan=2, padx=8, pady=4)
+        value.grid(row=row, column=3, sticky="e")
 
         def wheel(e):
             var.set(min(hi, max(lo, var.get() + (step if e.delta > 0 else -step))))
             changed()
-        scale.bind("<MouseWheel>", wheel)
+        for w in (slider, getattr(slider, "_canvas", slider)):
+            w.bind("<MouseWheel>", wheel)
+        value.configure(text=f"{var.get():g}{unit}")
+        return changed
+
+    def _slider(self, parent, row, attr, label, lo, hi, step, cast):
+        var = tk.DoubleVar(value=getattr(self.settings, attr))
+
+        def apply(v):
+            setattr(self.settings, attr, cast(v))
+            self._schedule_save()
+        changed = self._row_slider(parent, row, label, var, lo, hi, step, self.UNITS[attr], apply)
+        changed()
         self.vars[attr] = (var, changed)
 
+    def _check(self, parent, text, var, command):
+        return ctk.CTkCheckBox(parent, text=text, variable=var, command=command, text_color=FG, font=font(12),
+                               width=20, checkbox_width=18, checkbox_height=18, corner_radius=5, border_width=2,
+                               fg_color=ACCENT, hover_color=ACCENT_HI, border_color="#4a505c")
+
+    def _switch(self, parent, text, var, command):
+        return ctk.CTkSwitch(parent, text=text, variable=var, command=command, text_color=FG, font=font(),
+                             progress_color=ACCENT, button_color="#dfe3ea", button_hover_color="white",
+                             fg_color=FIELD, switch_width=38, switch_height=20)
+
+    def _dropdown(self, parent, var, choices, width, command=None):
+        return ctk.CTkOptionMenu(parent, variable=var, values=choices, width=width, height=32,
+                                 corner_radius=8, fg_color=FIELD, button_color=FIELD,
+                                 button_hover_color=BUTTON_HI, text_color=FG, font=font(),
+                                 dropdown_fg_color=CARD, dropdown_hover_color=BUTTON_HI,
+                                 dropdown_text_color=FG, dropdown_font=font(),
+                                 command=command or (lambda _v: self._location_changed()), dynamic_resizing=False)
+
     def _entry(self, parent, var, width):
-        return tk.Entry(parent, textvariable=var, width=width, bg=TROUGH, fg=FG, insertbackground=FG,
-                        relief="flat", font=FONT, highlightthickness=1, highlightbackground=TROUGH,
-                        highlightcolor=SLIDER)
+        return ctk.CTkEntry(parent, textvariable=var, width=width, height=28, corner_radius=8, fg_color=FIELD,
+                            border_width=0, text_color=FG, font=font())
+
+    def _button(self, parent, text, command, **kw):
+        kw.setdefault("height", 32)
+        return ctk.CTkButton(parent, text=text, command=command, corner_radius=8, fg_color=BUTTON,
+                             hover_color=BUTTON_HI, text_color=FG, font=font(12), **kw)
+
+    def _fill_counts(self):
+        """The number dropdown offers 1-14 days or 1-24 hours, depending on the mode."""
+        counts = self.COUNTS[self.WMODES[self.wmode.get()]]
+        self.count_menu.configure(values=[str(n) for n in counts])
+        if int(self.wcount.get() or 5) not in counts:
+            self.wcount.set(str(counts[-1]))
+
+    def _mode_changed(self, _v=None):
+        self._fill_counts()
+        self._location_changed()
+
+    def _show_counter_box(self):
+        card = self.counter_box.card
+        if self.league_vars[COUNTER].get():
+            if not card.winfo_manager():
+                card.pack(fill="x", pady=(8, 0), before=self.small)
+        else:
+            card.pack_forget()
+
+    def _opacity_changed(self, v=None):
+        v = self.opacity.get() if v is None else v
+        try:
+            self.root.attributes("-alpha", max(60, min(100, int(v))) / 100)
+        except tk.TclError:
+            pass
+        self._schedule_save()
 
     def _counter_bumped(self, n):
         """Called from the hotkey thread or a button: show it in the window and on the panel."""
@@ -309,11 +334,6 @@ class App:
     def _set_hotkey(self):
         err = self.counter.listen(self.c_hotkey.get().strip())
         self.log(err or f"Counter shortcut: {self.counter.hotkey}")
-
-    def _check(self, parent, text, var, command):
-        return tk.Checkbutton(parent, text=text, variable=var, command=command, bg=PANEL, fg=FG,
-                              selectcolor=TROUGH, activebackground=PANEL, activeforeground=FG,
-                              highlightthickness=0, bd=0, font=FONT, padx=2, pady=2)
 
     # ---------- settings ----------
     def _leagues_changed(self):
@@ -348,7 +368,7 @@ class App:
                       "location": s.location, "units": s.units, "weather_mode": s.weather_mode,
                       "weather_count": s.weather_count,
                       "autorun": self.autorun.get(), "screen_seconds": s.screen_seconds,
-                      "clock_24h": s.clock_24h}
+                      "clock_24h": s.clock_24h, "opacity": self.opacity.get()}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 
@@ -363,8 +383,11 @@ class App:
         self.autorun.set(False)
         self.units.set("°" + d.units)
         self.wmode.set(self.WMODES_REV[d.weather_mode])
+        self._fill_counts()
         self.wcount.set(str(d.weather_count))
         self.h24.set(False)
+        self.opacity.set(DEFAULT_OPACITY)
+        self._opacity_changed()
         self._location_changed()
         self._leagues_changed()
         self._opts_changed()
@@ -373,6 +396,10 @@ class App:
     # ---------- log / status ----------
     def log(self, msg):
         self.logq.put(msg)
+
+    def _set_toggle(self, text, color, hover):
+        if self.toggle.cget("text") != text:
+            self.toggle.configure(text=text, fg_color=color, hover_color=hover)
 
     def _poll(self):
         while not self.cmdq.empty():
@@ -389,14 +416,14 @@ class App:
             self.logbox.configure(state="disabled")
         running = self.thread is not None and self.thread.is_alive()
         if running and self.stop_event.is_set():
-            self.toggle.set_style("Stopping…", "#7a2a22", "#7a2a22")
-            self.status.configure(text="● Stopping", fg="#d9a03a")
+            self._set_toggle("Stopping…", "#7a2a22", "#7a2a22")
+            self.status.configure(text="●  Stopping", text_color="#d9a03a")
         elif running:
-            self.toggle.set_style("■   Stop", RED, RED_HI)
-            self.status.configure(text="● Running", fg="#25b864")
+            self._set_toggle("■   Stop", RED, RED_HI)
+            self.status.configure(text="●  Running", text_color=GREEN_HI)
         else:
-            self.toggle.set_style("▶   Run", GREEN, GREEN_HI)
-            self.status.configure(text="● Stopped", fg=MUTED)
+            self._set_toggle("▶   Run", GREEN, GREEN_HI)
+            self.status.configure(text="●  Stopped", text_color=MUTED)
         if self.tray and getattr(self, "_tray_running", None) != running:
             self._tray_running = running
             self.tray.icon = make_image(64, running)
@@ -410,7 +437,7 @@ class App:
             self.stop_event.set()          # the poll loop shows "Stopping…" until it's done
             return
         if not self.settings.leagues:
-            self.log("Pick at least one sport.")
+            self.log("Pick at least one thing to show.")
             return
         self.stop_event = threading.Event()
         self.thread = threading.Thread(target=self._worker, daemon=True)
@@ -527,11 +554,10 @@ if __name__ == "__main__":
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("zaycation.matrixticker")
         except Exception:
             pass
-    root = tk.Tk()
+    root = ctk.CTk()
     hidden = "--tray" in sys.argv and pystray is not None
-    if hidden:
-        root.withdraw()          # started by Windows at login: stay in the tray
     app = App(root)
-    if hidden and not app.tray:
-        root.deiconify()         # no tray after all: don't leave an invisible app
+    if hidden and app.tray:
+        root.withdraw()          # started by Windows at login: stay in the tray
+        root.after(400, root.withdraw)   # customtkinter re-shows the window once while styling the title bar
     root.mainloop()

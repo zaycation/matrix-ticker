@@ -36,6 +36,7 @@ jobs:
           --hidden-import pynvml
           --collect-submodules winrt
           --collect-data tzdata
+          --collect-data customtkinter
           gui.py
 
       - name: Install Inno Setup
