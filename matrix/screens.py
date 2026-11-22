@@ -25,17 +25,17 @@ def _clock_text(now, h24):
     return now.strftime("%H:%M") if h24 else f"{now.hour % 12 or 12}:{now.minute:02d}"
 
 
-def dashboard(now=None, h24=False):
+def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="temp"):
     """CPU / GPU meters, big clock, date: a remake of NexLinq's widget.
-    Both meters show load (how busy, 0-100 %). GPU load needs an NVIDIA card."""
+    Meters: see system.CPU_METERS / GPU_METERS (GPU ones need an NVIDIA card)."""
     now = now or dt.datetime.now()
     c = Canvas()
-    cpu = system.cpu_load()
-    gpu = (system.gpu_load() or 0) / 100
-    c.tiny("CPU", 0, 0, WHITE)                          # rows 0-3
-    c.tiny("GPU", 0, 6, WHITE)                          # rows 6-9 (2-row gap between)
-    _meter(c, 12, 0, 15, 4, (cpu or 0) / 100)
-    _meter(c, 12, 6, 15, 4, gpu)
+    top_label, top = system.CPU_METERS.get(cpu_meter, system.CPU_METERS["load"])
+    bottom_label, bottom = system.GPU_METERS.get(gpu_meter, system.GPU_METERS["temp"])
+    c.tiny(top_label, 0, 0, WHITE)                      # rows 0-3
+    c.tiny(bottom_label, 0, 6, WHITE)                   # rows 6-9 (2-row gap between)
+    _meter(c, 12, 0, 15, 4, top() or 0)
+    _meter(c, 12, 6, 15, 4, bottom() or 0)
     month, day = MONTHS[now.month - 1], str(now.day)
     date_w = normal_width(month) + 1 + normal_width(day)
     date_x = W - date_w

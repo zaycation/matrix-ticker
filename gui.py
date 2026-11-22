@@ -77,6 +77,8 @@ class App:
     WMODES = {"days": "daily", "hours": "hourly"}
     WMODES_REV = {v: k for k, v in WMODES.items()}
     COUNTS = {"daily": range(1, 15), "hourly": range(1, 25)}    # Open-Meteo gives 16 days ahead
+    CPU_METERS = {"Load": "load", "RAM": "ram"}
+    GPU_METERS = {"Temperature": "temp", "Load": "load", "VRAM": "vram", "Power": "power", "Fan": "fan"}
 
     def __init__(self, root):
         self.root = root
@@ -86,7 +88,7 @@ class App:
 
         saved = load_cfg().get("gui", {})
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
-                    "weather_count", "screen_seconds", "clock_24h"):
+                    "weather_count", "screen_seconds", "clock_24h", "cpu_meter", "gpu_meter"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
@@ -178,6 +180,17 @@ class App:
             self._switch(sw, text, var, cmd).pack(side="left", padx=(0, 14))
         self.opacity = tk.IntVar(value=int(saved.get("opacity", DEFAULT_OPACITY)))
         self._row_slider(box_o, 2, "Window opacity", self.opacity, 60, 100, 5, "%", self._opacity_changed)
+        meters = ctk.CTkFrame(box_o, fg_color="transparent")
+        meters.grid(row=3, column=0, columnspan=4, sticky="w", pady=(4, 0))
+        ctk.CTkLabel(meters, text="Dashboard meters", text_color=FG, font=font(), width=110,
+                     anchor="w").pack(side="left")
+        rev = lambda d, v: next((k for k, x in d.items() if x == v), next(iter(d)))
+        self.cpu_meter = tk.StringVar(value=rev(self.CPU_METERS, self.settings.cpu_meter))
+        self.gpu_meter = tk.StringVar(value=rev(self.GPU_METERS, self.settings.gpu_meter))
+        ctk.CTkLabel(meters, text="CPU", text_color=MUTED, font=font(12)).pack(side="left", padx=(8, 4))
+        self._dropdown(meters, self.cpu_meter, list(self.CPU_METERS), 84, self._meters_changed).pack(side="left")
+        ctk.CTkLabel(meters, text="GPU", text_color=MUTED, font=font(12)).pack(side="left", padx=(12, 4))
+        self._dropdown(meters, self.gpu_meter, list(self.GPU_METERS), 128, self._meters_changed).pack(side="left")
 
         # counter (only shown when COUNTER is ticked)
         self.counter_box = box3 = self._card(outer, "Counter", pack=False)
@@ -376,6 +389,11 @@ class App:
         self.settings.weather_count = int(self.wcount.get() or 5)
         self._schedule_save()
 
+    def _meters_changed(self, _v=None):
+        self.settings.cpu_meter = self.CPU_METERS[self.cpu_meter.get()]
+        self.settings.gpu_meter = self.GPU_METERS[self.gpu_meter.get()]
+        self._schedule_save()
+
     def _opts_changed(self):
         self.settings.loop = self.loop.get()
         self.settings.clock_24h = self.h24.get()
@@ -396,7 +414,8 @@ class App:
                       "location": s.location, "units": s.units, "weather_mode": s.weather_mode,
                       "weather_count": s.weather_count,
                       "autorun": self.autorun.get(), "screen_seconds": s.screen_seconds,
-                      "clock_24h": s.clock_24h, "opacity": self.opacity.get()}
+                      "clock_24h": s.clock_24h, "opacity": self.opacity.get(),
+                      "cpu_meter": s.cpu_meter, "gpu_meter": s.gpu_meter}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 
@@ -414,6 +433,9 @@ class App:
         self._fill_counts()
         self.wcount.set(str(d.weather_count))
         self.h24.set(False)
+        self.cpu_meter.set("Load")
+        self.gpu_meter.set("Temperature")
+        self._meters_changed()
         self.opacity.set(DEFAULT_OPACITY)
         self._opacity_changed()
         self._location_changed()

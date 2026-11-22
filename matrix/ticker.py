@@ -34,6 +34,8 @@ class Settings:
     weather_count: int = 5         # how many days / hours to show
     screen_seconds: float = 10.0   # how long each static screen (dashboard, calendar, counter) stays
     clock_24h: bool = False
+    cpu_meter: str = "load"        # dashboard top meter: load, ram
+    gpu_meter: str = "temp"        # dashboard bottom meter: temp, load, vram, power, fan
     loop: bool = True
     verbose: bool = False
     step: int = 4                  # pixels moved per frame
@@ -134,7 +136,7 @@ class ScrollTicker:
         while time.perf_counter() < end and not self.stop.is_set():
             self._maybe_flash()
             if item == DASHBOARD:
-                buf = screens.dashboard(h24=self.s.clock_24h)
+                buf = screens.dashboard(h24=self.s.clock_24h, cpu_meter=self.s.cpu_meter, gpu_meter=self.s.gpu_meter)
             elif item == CALENDAR:
                 buf = screens.calendar()
             else:
