@@ -20,7 +20,8 @@ import customtkinter as ctk
 
 from matrix import nexlinq, updates
 from matrix.counter import Counter
-from matrix.ticker import COUNTER, FANTASY, ITEMS, ScrollTicker, Settings, restore_layout
+from matrix.timer import Timer, clock
+from matrix.ticker import COUNTER, FANTASY, ITEMS, TIMER, ScrollTicker, Settings, restore_layout
 from matrix.version import __version__
 
 try:
@@ -99,6 +100,7 @@ class App:
         self.cmdq, self.tray, self._told_tray, self._closed = queue.Queue(), None, False, False
         self.ticker = None
         self.counter = Counter(on_change=self._counter_bumped)
+        self.timer = Timer()
 
         root.title("Matrix Ticker")
         root.configure(fg_color=BG)
@@ -205,6 +207,38 @@ class App:
         self._fill_counts()
         box_w.columnconfigure(1, weight=1)
 
+        # timer (only shown when TIMER is ticked)
+        self.left = left
+        self.timer_box = box_t = self._card(left, "Timer", pack=False)
+        self.timer_left = ctk.CTkLabel(box_t, text=clock(self.timer.duration), text_color=FG,
+                                       font=font(26, "bold"), width=110, anchor="e")
+        self.timer_left.grid(row=0, column=3, rowspan=2, sticky="ne")
+        self.t_label = tk.StringVar(value=self.timer.label)
+        self.t_label.trace_add("write", lambda *_: self._timer_settings())
+        self._entry(box_t, self.t_label, 110).grid(row=1, column=0, sticky="w", pady=3)
+        self.t_minutes = tk.StringVar(value=f"{self.timer.minutes:g}")
+        ctk.CTkComboBox(box_t, variable=self.t_minutes, values=["5", "10", "15", "25", "30", "45", "60", "90"],
+                        width=72, height=28, corner_radius=8, fg_color=FIELD, border_width=0, button_color=FIELD,
+                        button_hover_color=BUTTON_HI, text_color=FG, font=font(), dropdown_fg_color=CARD,
+                        dropdown_hover_color=BUTTON_HI, dropdown_text_color=FG, dropdown_font=font(),
+                        command=lambda _v: self._timer_settings()).grid(row=1, column=1, sticky="w", padx=(8, 0))
+        self.t_minutes.trace_add("write", lambda *_: self._timer_settings())
+        ctk.CTkLabel(box_t, text="min", text_color=MUTED, font=font(12)).grid(row=1, column=2, sticky="w", padx=(4, 0))
+        tb = ctk.CTkFrame(box_t, fg_color="transparent")
+        tb.grid(row=2, column=0, columnspan=4, sticky="we", pady=(6, 0))
+        self.t_start = ctk.CTkButton(tb, text="Start", command=self._timer_toggle, width=80, height=30,
+                                     corner_radius=8, fg_color=GREEN, hover_color=GREEN_HI, text_color="white",
+                                     font=font(12, "bold"))
+        self.t_start.pack(side="left")
+        self._button(tb, "Reset", self.timer.reset, width=60, height=30).pack(side="left", padx=(6, 0))
+        self._button(tb, "+5 min", lambda: self.timer.add_minutes(5), width=60, height=30).pack(side="left", padx=(6, 0))
+        self.t_hotkey = tk.StringVar(value=self.timer.hotkey)
+        self._button(tb, "Set", self._set_timer_hotkey, width=44, height=30).pack(side="right")
+        self._entry(tb, self.t_hotkey, 100).pack(side="right", padx=(0, 6))
+        ctk.CTkLabel(box_t, text="Shortcut starts/pauses. While it runs, the panel shows the timer.",
+                     text_color=MUTED, font=font(11)).grid(row=3, column=0, columnspan=4, sticky="w", pady=(4, 0))
+        box_t.columnconfigure(3, weight=1)
+
         # options
         box_o = self._card(right, "Options")
         self.loop = tk.BooleanVar(value=self.settings.loop)
@@ -275,16 +309,16 @@ class App:
                                      font=ctk.CTkFont(family="Consolas", size=12), wrap="word",
                                      state="disabled", activate_scrollbars=True)
         self.logbox.pack(fill="both", expand=True, pady=(10, 0))
-        ctk.CTkLabel(outer, text=f"v{__version__}  ·  Scores: ESPN  ·  Fantasy: Sleeper  ·  Weather: Open-Meteo.com",
+        ctk.CTkLabel(outer, text=f"{'v' + __version__ if updates.parse(__version__) else 'dev'}  ·  Scores: ESPN  ·  Fantasy: Sleeper  ·  Weather: Open-Meteo.com",
                      text_color=MUTED,
                      font=font(10)).pack(anchor="e", pady=(4, 0))
 
         self._show_counter_box()
         self._opacity_changed()
         self._check_updates()
-        err = self.counter.listen()
-        if err:
-            self.log(err)
+        for err in (self.counter.listen(), self.timer.listen()):
+            if err:
+                self.log(err)
         root.protocol("WM_DELETE_WINDOW", self.hide_or_quit)
         root.bind("<Unmap>", self._minimized)
         self._start_tray()
@@ -397,7 +431,13 @@ class App:
         self._location_changed()
 
     def _show_counter_box(self):
-        """Fantasy and counter settings only show when their item is ticked (in that order)."""
+        """Fantasy, counter and timer settings only show when their item is ticked."""
+        t = self.timer_box.card
+        if self.league_vars[TIMER].get():
+            if not t.winfo_manager():
+                t.pack(fill="x", pady=(8, 0))
+        else:
+            t.pack_forget()
         cards = [(self.fantasy_box.card, FANTASY), (self.counter_box.card, COUNTER)]
         wanted = [c for c, item in cards if self.league_vars[item].get()]
         if [c for c, _ in cards if c.winfo_manager()] == wanted:
@@ -457,6 +497,42 @@ class App:
         self.cmdq.put(lambda: self.count_label.configure(text=str(n)))
         if self.ticker is not None:
             self.ticker.flash.set()
+
+    def _timer_settings(self):
+        self.timer.label = self.t_label.get().strip() or "TIMER"
+        try:
+            m = float(self.t_minutes.get())
+            if 0 < m <= 24 * 60:
+                self.timer.minutes = m
+        except ValueError:
+            pass
+        self.timer.save()
+
+    def _timer_toggle(self):
+        self._timer_settings()
+        self.timer.toggle()
+        if self.timer.running() and self.ticker is None:
+            self.log("Timer started. Press Run to see it on the panel.")
+
+    def _set_timer_hotkey(self):
+        err = self.timer.listen(self.t_hotkey.get().strip())
+        self.log(err or f"Timer shortcut: {self.timer.hotkey}")
+
+    def _update_timer_view(self):
+        t = self.timer
+        if self.ticker is None and t.take_finished():      # not on the panel: tell the PC instead
+            self.log(f"{t.label}: time's up!")
+            if self.tray:
+                try:
+                    self.tray.notify(f"{t.label}: time's up!", "Matrix Ticker")
+                except Exception:
+                    pass
+        self.timer_left.configure(text=clock(t.remaining()),
+                                  text_color=GOLD if t.paused() else (GREEN_HI if t.running() else FG))
+        want = "Pause" if t.running() else ("Resume" if t.paused() else "Start")
+        if self.t_start.cget("text") != want:
+            self.t_start.configure(text=want, fg_color=RED if want == "Pause" else GREEN,
+                                   hover_color=RED_HI if want == "Pause" else GREEN_HI)
 
     def _counter_label(self):
         self.counter.label = self.c_label.get().strip() or "COUNT"
@@ -561,6 +637,8 @@ class App:
             self.toggle.configure(text=text, fg_color=color, hover_color=hover)
 
     def _poll(self):
+        if not self._closed:
+            self._update_timer_view()
         while not self.cmdq.empty():
             self.cmdq.get()()
             if self._closed:            # a tray "Quit" just closed the window
@@ -635,7 +713,7 @@ class App:
             panel = Matrix()
             self.log("Ticker started.")
             self.ticker = ScrollTicker(panel, self.settings, log=self.log, stop_event=self.stop_event,
-                                       counter=self.counter)
+                                       counter=self.counter, timer=self.timer)
             self.ticker.run()
             self.log("Ticker stopped." if self.stop_event.is_set() else "Ticker finished.")
         except Exception as e:
@@ -708,6 +786,7 @@ class App:
 
     def quit(self):
         self.counter.stop_listening()
+        self.timer.stop_listening()
         self._stop_and_wait()
         if self._save_job:
             self._save()

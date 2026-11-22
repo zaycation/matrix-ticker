@@ -64,6 +64,12 @@ scrolls by (green when you're winning), and with alerts on, a starter's big play
 
 **Updates:** the app checks for a new version once a day and shows a **Download** button when one is out.
 
+**Timer:** tick **TIMER**, name it (`FOCUS`, `LAUNDRY`), pick the minutes and press **Start**, or use
+the shortcut (`ctrl+alt+t`), which works in games. While it runs, the display shows the countdown;
+at zero it flashes **TIME'S UP** and the ticker carries on.
+
+![Timer](docs/images/timer.png)
+
 **Counter:** tick **COUNTER**, type a label (like `CHESTS`) and a key (like `f8`), then click **Set**.
 Press that key anytime to add one; the display shows the new count for a few seconds.
 

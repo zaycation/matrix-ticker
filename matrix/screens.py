@@ -81,6 +81,37 @@ def counter(label, count, flash=False, blink=False):
     return c.to_bytes()
 
 
+def timer(label, remaining, progress, paused=False, blink=False):
+    """Label + big countdown, with a bar along the bottom that drains as time runs out.
+    Paused: the time goes gray and the label says PAUSED (blinking)."""
+    from .timer import clock
+    c = Canvas()
+    text = clock(remaining)
+    color = GRAY if paused else (RED if remaining <= 60 else WHITE)
+    x = W - big_width(text)
+    c.big(text, x, color, top=0, height=8)
+    name = "PAUSED" if paused and blink else (label.upper()[:10] or "TIMER")
+    room = x - 3
+    while name and normal_width(name) > room:
+        name = name[:-1]
+    c.normal(name, 0, 0, GOLD if name == "PAUSED" else CYAN)
+    lit = round(max(0.0, min(1.0, progress)) * W)
+    c.rect(0, 9, W - 1, 9, DIM)
+    if lit:
+        c.rect(0, 9, lit - 1, 9, RED if remaining <= 60 else (60, 190, 235))
+    return c.to_bytes()
+
+
+def times_up(label, blink):
+    """TIME'S UP, blinking red and white."""
+    c = Canvas()
+    msg = "TIME'S UP"
+    c.normal(msg, (W - normal_width(msg)) // 2, 1, RED if blink else WHITE)
+    if blink:
+        c.rect(0, 9, W - 1, 9, RED)
+    return c.to_bytes()
+
+
 def now_playing_segments():
     """Scrolling 'note TITLE - ARTIST', or None if nothing is playing."""
     np = media.now_playing()

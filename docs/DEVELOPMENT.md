@@ -24,7 +24,7 @@ Screens: `--dashboard --calendar --counter --nowplaying`, `--screen-seconds 10`,
 Preview example: `python main.py --style scroll --preview --dashboard --calendar --counter`.
 Scroll style: `--speed` (px/s), `--step`, `--brightness`, `--league-gap`, `--sep`.
 Weather: `--location`, `--hourly`, `--count N`, `--celsius`.
-Favorites/alerts: `--favorites "Bears, 76ers"`, `--only-favorites`, `--no-alerts`. Fantasy: `--fantasy --sleeper USER [--sleeper-league NAME]`. Ctrl+C stops and restores `layouts/default.json`.
+Favorites/alerts: `--favorites "Bears, 76ers"`, `--only-favorites`, `--no-alerts`. Fantasy: `--fantasy --sleeper USER [--sleeper-league NAME]`. Timer: `--timer 25` (minutes). Ctrl+C stops and restores `layouts/default.json`.
 
 Text style only (the original single-color ticker using the panel's text widget):
 `--calibrate`, `--speed-scale`, `--page-buffer`, `config.json` `scale` / `live_bonus`.

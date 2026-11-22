@@ -183,16 +183,21 @@ def run_scroll(panel, args, leagues):
     source = (lambda lg: DEMO.get(lg, [])) if args.demo else None
     from matrix.counter import Counter
     counter = Counter()
+    from matrix.timer import Timer
+    timer = Timer()
+    if args.timer:
+        timer.start(minutes=args.timer)
+    timer.listen()
     if panel:
         print("Scroll ticker running (NexLinq must be closed). Ctrl+C to stop.")
-        ScrollTicker(panel, settings, games_source=source, counter=counter).run()
+        ScrollTicker(panel, settings, games_source=source, counter=counter, timer=timer).run()
     else:
         print("\x1b[2J", end="")
 
         def log_below(msg):   # messages go on a line under the preview
             print(f"\x1b[{render.preview_rows() + 2};1H\x1b[K{msg}", flush=True)
         ScrollTicker(None, settings, log=log_below, games_source=source, show=render.preview,
-                     counter=counter).run()
+                     counter=counter, timer=timer).run()
 
 
 def restore(panel):
@@ -238,6 +243,8 @@ def main():
                        ("--nowplaying", NOWPLAYING), ("--fantasy", FANTASY)):
         ap.add_argument(flag, dest="only", action="append_const", const=item,
                         help=f"include the {item.lower()} screen (scroll style)")
+    ap.add_argument("--timer", type=float, default=0, metavar="MINUTES",
+                    help="start a countdown that takes over the panel (scroll style)")
     ap.add_argument("--screen-seconds", type=float, default=10.0, help="seconds per static screen")
     ap.add_argument("--24h", dest="h24", action="store_true", help="24-hour clock on the dashboard")
     ap.add_argument("--location", default="", help='weather location: city, ZIP, "91367, US" or "lat,lon"')

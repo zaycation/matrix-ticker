@@ -18,8 +18,8 @@ from .paths import RESTORE_FILE
 MIN_GAP = 0.15          # the panel needs > 0.05 s after each frame; 0.15 s is proven
 STATE_ORDER = {"in": 0, "post": 1, "pre": 2}
 WEATHER, NOWPLAYING, FANTASY = "WEATHER", "NOW PLAYING", "FANTASY"
-DASHBOARD, CALENDAR, COUNTER = "DASHBOARD", "CALENDAR", "COUNTER"
-SCREENS = [DASHBOARD, CALENDAR, COUNTER]            # static screens, shown for screen_seconds
+DASHBOARD, CALENDAR, COUNTER, TIMER = "DASHBOARD", "CALENDAR", "COUNTER", "TIMER"
+SCREENS = [DASHBOARD, CALENDAR, COUNTER, TIMER]            # static screens, shown for screen_seconds
 ITEMS = list(scores.ALL) + [FANTASY, WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
 FLASH_SECONDS = 3.0
 
@@ -90,7 +90,7 @@ def restore_layout(panel):
 
 class ScrollTicker:
     def __init__(self, panel, settings, log=print, stop_event=None, games_source=None, show=None,
-                 counter=None):
+                 counter=None, timer=None):
         """panel: matrix.transport.Matrix (or None with show= for previews).
         games_source(league) -> list of games; defaults to live ESPN data.
         counter: matrix.counter.Counter for the COUNTER screen and its flash."""
@@ -98,6 +98,7 @@ class ScrollTicker:
         self.stop = stop_event or threading.Event()
         self.flash = threading.Event()        # set when the counter is bumped
         self.counter = counter
+        self.timer = timer                    # matrix.timer.Timer: takes over the panel while running
         self.alert_q, self.alert_ready = queue.Queue(), threading.Event()
         self.games_source = games_source or scores.games
         self.show = show or self._send
@@ -106,7 +107,8 @@ class ScrollTicker:
         """Sleep in short steps: Event.wait() can't be interrupted by Ctrl+C on Windows,
         time.sleep() can. Stops early if stop is set."""
         end = time.perf_counter() + max(0.0, seconds)
-        while not self.stop.is_set() and not self.flash.is_set() and not self.alert_ready.is_set():
+        while (not self.stop.is_set() and not self.flash.is_set() and not self.alert_ready.is_set()
+               and not (self.timer is not None and (self.timer.active() or self.timer._finished.is_set()))):
             left = end - time.perf_counter()
             if left <= 0:
                 return
@@ -139,8 +141,34 @@ class ScrollTicker:
             while time.perf_counter() < end and not self.stop.is_set():
                 time.sleep(0.05)
 
-    def _maybe_flash(self):
-        """Cut in for alerts, and for the counter if it was just bumped."""
+    def _timer_takeover(self):
+        """While the timer runs (or is paused) show it full-time; flash TIME'S UP at zero."""
+        t = self.timer
+        if t is None:
+            return
+        if t.active():
+            self.log(f"Timer: {t.label}")
+            blink = False
+            while t.active() and not self.stop.is_set():
+                took = self._frame(screens.timer(t.label, t.remaining(), t.progress(), t.paused(), blink))
+                blink = not blink
+                if self.alert_ready.is_set() or self.flash.is_set():
+                    self._maybe_flash(timer=False)
+                end = time.perf_counter() + max(MIN_GAP, 0.5 - took)
+                while time.perf_counter() < end and not self.stop.is_set() and not self.alert_ready.is_set():
+                    time.sleep(0.05)
+        if t.take_finished():
+            self.log("Timer: time's up")
+            end, blink = time.perf_counter() + 8, True
+            while time.perf_counter() < end and not self.stop.is_set() and not t.active():
+                took = self._frame(screens.times_up(t.label, blink))
+                blink = not blink
+                time.sleep(max(MIN_GAP, 0.5 - took))
+
+    def _maybe_flash(self, timer=True):
+        """Cut in for the timer, alerts, and the counter if it was just bumped."""
+        if timer:
+            self._timer_takeover()
         if self.alert_ready.is_set():
             self.alert_ready.clear()
             while not self.alert_q.empty() and not self.stop.is_set():
@@ -162,6 +190,8 @@ class ScrollTicker:
         """Show a static screen for screen_seconds, redrawing about once a second."""
         if item == COUNTER and self.counter is None:
             return False
+        if item == TIMER:
+            return False             # the timer cuts in on its own while it runs
         self.log(item.title())
         end = time.perf_counter() + self.s.screen_seconds
         while time.perf_counter() < end and not self.stop.is_set():
