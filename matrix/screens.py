@@ -8,6 +8,8 @@ WHITE, GRAY, DIM = (255, 255, 255), (110, 110, 110), (28, 30, 38)
 CYAN, GOLD, RED = (60, 210, 230), (255, 200, 0), (220, 35, 35)
 METER = [(70, 230, 220), (60, 190, 235), (60, 150, 245), (70, 110, 255), (95, 80, 255)]
 MONTHS = "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split()
+WEEKDAYS = "MON TUE WED THU FRI SAT SUN".split()
+WEEK_DIM = (70, 70, 70)
 
 
 def _meter(c, x, y, w, h, frac):
@@ -47,28 +49,22 @@ def dashboard(now=None, h24=False):
 
 
 def calendar(today=None):
-    """A tear-off calendar page (month + day) and this week with today highlighted."""
+    """Minimal: weekday + date centered, and a thin week bar underneath (today lit).
+    Bright, solid colors only: dim grays and tiny 3x5 digits look muddy on the real LEDs."""
     today = today or dt.date.today()
     c = Canvas()
-    c.rect(0, 0, 20, 4, (150, 20, 20))                 # page header (deep red)
-    m = MONTHS[today.month - 1]
-    c.small(m, (21 - small_width(m)) // 2, 0, WHITE)
-    for yy in range(5, 10):                            # page outline under the header
-        c.set(0, yy, (90, 90, 90))
-        c.set(20, yy, (90, 90, 90))
-    d = str(today.day)
-    c.small(d, (21 - small_width(d)) // 2, 5, WHITE)
-    start = today - dt.timedelta(days=(today.weekday() + 1) % 7)   # week starts Sunday
+    wd = WEEKDAYS[today.weekday()]
+    date = f"{MONTHS[today.month - 1]} {today.day}"
+    w = normal_width(wd) + 5 + normal_width(date)
+    x = (W - w) // 2
+    x = c.normal(wd, x, 0, RED)
+    c.normal(date, x + 5, 0, WHITE)
+    sunday_index = (today.weekday() + 1) % 7            # week runs Sunday..Saturday
+    seg, gap = 10, 3
+    x0 = (W - (7 * seg + 6 * gap)) // 2
     for i in range(7):
-        day = start + dt.timedelta(days=i)
-        x0 = 24 + i * 9
-        weekend = i in (0, 6)
-        if day == today:
-            c.rect(x0 - 1, 5, x0 + 7, 9, RED)
-        c.small("SMTWTFS"[i], x0 + 2, 0, CYAN if day == today else (GRAY if weekend else (190, 190, 190)))
-        num = str(day.day)
-        color = WHITE if day == today else ((130, 130, 130) if weekend else (215, 215, 215))
-        c.small(num, x0 + (7 - small_width(num)) // 2, 5, color)
+        color = RED if i == sunday_index else WEEK_DIM
+        c.rect(x0 + i * (seg + gap), 9, x0 + i * (seg + gap) + seg - 1, 9, color)
     return c.to_bytes()
 
 

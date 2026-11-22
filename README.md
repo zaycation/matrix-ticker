@@ -21,7 +21,7 @@ Only games happening today show up.
 
 ![Dashboard](docs/images/dashboard.png)
 
-**Calendar:** today's page and this week.
+**Calendar:** the day and date, with this week underneath.
 
 ![Calendar](docs/images/calendar.png)
 
@@ -48,7 +48,8 @@ That's it. It can start with Windows and sits quietly by the clock.
 1. Open **Matrix Ticker** from the Start menu.
 2. Tick what you want to see.
 3. For weather, type your city or ZIP code.
-4. Press the big green **Run** button.
+4. Press the big green **Run** button. Change something while it runs and a **Restart** button
+   appears to apply it.
 
 Everything you change is saved. **Window opacity** (under Options) makes the window see-through. Closing the window keeps it running in the
 **system tray** (the little icons by the clock). Right-click that icon to stop it or quit.
@@ -78,5 +79,5 @@ press Run (if it's open). You don't need it installed. Use **Launch NexLinq** to
 
 ---
 
-Scores from ESPN. Weather by [Open-Meteo.com](https://open-meteo.com). Not affiliated with Phanteks.
+MIT licensed. Scores from ESPN. Weather by [Open-Meteo.com](https://open-meteo.com). Not affiliated with Phanteks.
 Developers: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).

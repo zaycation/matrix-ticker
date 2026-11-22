@@ -7,6 +7,7 @@ Closing the window keeps it running in the system tray (needs pystray + Pillow).
 Settings are saved to config.json under "gui".
 """
 import ctypes
+import dataclasses
 import json
 import queue
 import sys
@@ -34,7 +35,7 @@ BUTTON, BUTTON_HI = "#2c313b", "#383e4a"
 GREEN, GREEN_HI, RED, RED_HI = "#1f9d55", "#25b864", "#c0392b", "#d9443a"
 GOLD = "#ffc800"
 FAMILY = "Segoe UI"
-DEFAULT_OPACITY = 94
+DEFAULT_OPACITY = 95
 
 ctk.set_appearance_mode("dark")
 
@@ -67,10 +68,10 @@ def font(size=13, weight="normal"):
 
 class App:
     SLIDERS = [  # attr, label, low, high, step, cast
-        ("speed", "Speed", 6, 48, 1, float),
+        ("speed", "Speed", 6, 48, 3, float),
         ("padding", "Padding", 1, 15, 1, int),
-        ("brightness", "Brightness", 10, 100, 5, int),
-        ("screen_seconds", "Screen time", 3, 30, 1, int),
+        ("brightness", "Brightness", 10, 100, 10, int),
+        ("screen_seconds", "Screen time", 2, 30, 2, int),
     ]
     UNITS = {"speed": " px/s", "padding": "", "brightness": "%", "screen_seconds": "s"}
     WMODES = {"days": "daily", "hours": "hourly"}
@@ -113,10 +114,16 @@ class App:
         self.status.pack(side="right")
 
         # big run/stop toggle
-        self.toggle = ctk.CTkButton(outer, text="▶   Run", command=self.toggle_run, height=50, corner_radius=14,
+        runrow = ctk.CTkFrame(outer, fg_color="transparent")
+        runrow.pack(fill="x", pady=(12, 4))
+        self.toggle = ctk.CTkButton(runrow, text="▶   Run", command=self.toggle_run, height=50, corner_radius=14,
                                     fg_color=GREEN, hover_color=GREEN_HI, text_color="white",
                                     font=font(17, "bold"))
-        self.toggle.pack(fill="x", pady=(12, 4))
+        self.toggle.pack(side="left", fill="x", expand=True)
+        self.restart_btn = ctk.CTkButton(runrow, text="↻   Restart", command=self.restart, height=50, width=170,
+                                         corner_radius=14, fg_color=ACCENT, hover_color=ACCENT_HI,
+                                         text_color="white", font=font(17, "bold"))
+        self._run_snapshot, self._restarting = None, False
 
         # sliders
         box = self._card(outer, "Ticker")
@@ -137,11 +144,15 @@ class App:
 
         # weather
         box_w = self._card(outer, "Weather")
-        self.location = tk.StringVar(value=self.settings.location)
-        self.location.trace_add("write", lambda *_: self._location_changed())
-        ctk.CTkEntry(box_w, textvariable=self.location, placeholder_text="City or ZIP, e.g. 91367",
-                     width=170, height=32, corner_radius=8, fg_color=FIELD, border_width=0, text_color=FG,
-                     font=font()).grid(row=1, column=0, sticky="w")
+        # no textvariable: customtkinter only shows the placeholder hint without one
+        self.location = ctk.CTkEntry(box_w, placeholder_text="City or ZIP, e.g. 91367", width=170, height=32,
+                                     corner_radius=8, fg_color=FIELD, border_width=0, text_color=FG,
+                                     placeholder_text_color=MUTED, font=font())
+        if self.settings.location:
+            self.location.insert(0, self.settings.location)
+        self.location.bind("<KeyRelease>", lambda e: self._location_changed())
+        self.location.bind("<FocusOut>", lambda e: self._location_changed())
+        self.location.grid(row=1, column=0, sticky="w")
         menus = ctk.CTkFrame(box_w, fg_color="transparent")
         menus.grid(row=1, column=1, sticky="e", padx=(10, 0))
         self.units = tk.StringVar(value="°" + self.settings.units)
@@ -166,7 +177,7 @@ class App:
                                ("Run when the app opens", self.autorun, self._schedule_save)):
             self._switch(sw, text, var, cmd).pack(side="left", padx=(0, 14))
         self.opacity = tk.IntVar(value=int(saved.get("opacity", DEFAULT_OPACITY)))
-        self._row_slider(box_o, 2, "Window opacity", self.opacity, 60, 100, 1, "%", self._opacity_changed)
+        self._row_slider(box_o, 2, "Window opacity", self.opacity, 60, 100, 5, "%", self._opacity_changed)
 
         # counter (only shown when COUNTER is ticked)
         self.counter_box = box3 = self._card(outer, "Counter", pack=False)
@@ -242,11 +253,15 @@ class App:
             value.configure(text=f"{v}{unit}")
             on_change(v)
 
-        slider = ctk.CTkSlider(parent, from_=lo, to=hi, number_of_steps=int(round((hi - lo) / step)),
-                               variable=var, command=changed, width=290, height=16,
+        steps = int(round((hi - lo) / step))
+        col = ctk.CTkFrame(parent, fg_color="transparent")
+        col.grid(row=row, column=1, columnspan=2, padx=8, pady=(4, 2))
+        slider = ctk.CTkSlider(col, from_=lo, to=hi, number_of_steps=steps,
+                               variable=var, command=changed, width=self.SLIDER_W, height=16,
                                fg_color=FIELD, progress_color=ACCENT, button_color=ACCENT,
                                button_hover_color=ACCENT_HI)
-        slider.grid(row=row, column=1, columnspan=2, padx=8, pady=4)
+        slider.pack()
+        self._notches(col, steps)
         value.grid(row=row, column=3, sticky="e")
 
         def wheel(e):
@@ -256,6 +271,19 @@ class App:
             w.bind("<MouseWheel>", wheel)
         value.configure(text=f"{var.get():g}{unit}")
         return changed
+
+    SLIDER_W = 290
+
+    def _notches(self, parent, steps):
+        """Tick marks under a slider, one per stop, so it's clear it snaps."""
+        scale = ctk.ScalingTracker.get_widget_scaling(parent)
+        w, h = round(self.SLIDER_W * scale), round(5 * scale)
+        cv = tk.Canvas(parent, width=w, height=h, bg=CARD, highlightthickness=0, bd=0)
+        cv.pack()
+        inset = 8 * scale                                  # the knob's centre never reaches the very ends
+        for i in range(steps + 1):
+            x = round(inset + (w - 2 * inset) * i / steps)
+            cv.create_line(x, 0, x, h, fill="#4a505c", width=max(1, round(scale)))
 
     def _slider(self, parent, row, attr, label, lo, hi, step, cast):
         var = tk.DoubleVar(value=getattr(self.settings, attr))
@@ -342,7 +370,7 @@ class App:
         self._schedule_save()
 
     def _location_changed(self):
-        self.settings.location = self.location.get()
+        self.settings.location = self.location.get().strip()
         self.settings.units = self.units.get().lstrip("°")
         self.settings.weather_mode = self.WMODES[self.wmode.get()]
         self.settings.weather_count = int(self.wcount.get() or 5)
@@ -415,7 +443,20 @@ class App:
             self.logbox.see("end")
             self.logbox.configure(state="disabled")
         running = self.thread is not None and self.thread.is_alive()
-        if running and self.stop_event.is_set():
+        changed = running and not self.stop_event.is_set() and self._snapshot() != self._run_snapshot
+        if changed != bool(self.restart_btn.winfo_manager()):
+            if changed:
+                self.restart_btn.pack(side="left", padx=(8, 0))
+            else:
+                self.restart_btn.pack_forget()
+        if not running and self._restarting:
+            self._restarting = False
+            self.toggle_run()
+            running = True
+        if running and self.stop_event.is_set() and self._restarting:
+            self._set_toggle("Restarting…", "#2d3f80", "#2d3f80")
+            self.status.configure(text="●  Restarting", text_color=ACCENT_HI)
+        elif running and self.stop_event.is_set():
             self._set_toggle("Stopping…", "#7a2a22", "#7a2a22")
             self.status.configure(text="●  Stopping", text_color="#d9a03a")
         elif running:
@@ -440,8 +481,19 @@ class App:
             self.log("Pick at least one thing to show.")
             return
         self.stop_event = threading.Event()
+        self._run_snapshot = self._snapshot()
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
+
+    def _snapshot(self):
+        """Settings as they are now, to tell whether a restart would change anything."""
+        return dataclasses.asdict(self.settings)
+
+    def restart(self):
+        """Stop, then start again with the current settings (the poll loop starts it)."""
+        if self.thread and self.thread.is_alive():
+            self._restarting = True
+            self.stop_event.set()
 
     def _worker(self):
         panel = None
@@ -461,7 +513,8 @@ class App:
             self.ticker = None
             if panel:
                 try:
-                    self.log(restore_layout(panel))
+                    if not self._restarting:          # about to start again: skip the flash of the old layout
+                        self.log(restore_layout(panel))
                 finally:
                     panel.close()
 
