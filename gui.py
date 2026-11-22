@@ -237,6 +237,7 @@ class App:
         if err:
             self.log(err)
         root.protocol("WM_DELETE_WINDOW", self.hide_or_quit)
+        root.bind("<Unmap>", self._minimized)
         self._start_tray()
         root.after(200, self._poll)
         if self.autorun.get():
@@ -579,6 +580,11 @@ class App:
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
+
+    def _minimized(self, event):
+        """The minimize button sends the window to the tray instead of the taskbar."""
+        if event.widget is self.root and self.tray and self.root.state() == "iconic":
+            self.root.after(10, self.root.withdraw)
 
     def hide_or_quit(self):
         if not self.tray:
