@@ -17,7 +17,7 @@ from tkinter import filedialog
 
 from matrix import nexlinq, scores
 from matrix.counter import Counter
-from matrix.ticker import ITEMS, WEATHER, ScrollTicker, Settings, restore_layout
+from matrix.ticker import COUNTER, ITEMS, WEATHER, ScrollTicker, Settings, restore_layout
 
 try:
     import pystray
@@ -91,7 +91,7 @@ class FlatButton(tk.Label):
 
 class App:
     SLIDERS = [  # attr, label, low, high, step, cast
-        ("speed", "Speed  (pixels/s)", 6, 24, 0.5, float),
+        ("speed", "Speed  (pixels/s)", 6, 48, 1, float),
         ("padding", "Padding  (spaces)", 1, 15, 1, int),
         ("brightness", "Brightness  (%)", 10, 100, 5, int),
         ("screen_seconds", "Screen time  (s)", 3, 30, 1, int),
@@ -105,7 +105,7 @@ class App:
 
         saved = load_cfg().get("gui", {})
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
-                    "screen_seconds", "clock_24h"):
+                    "weather_count", "screen_seconds", "clock_24h"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
@@ -161,30 +161,32 @@ class App:
         tk.Entry(loc, textvariable=self.location, width=26, bg=TROUGH, fg=FG, insertbackground=FG,
                  relief="flat", font=FONT, highlightthickness=1, highlightbackground=TROUGH,
                  highlightcolor=SLIDER).pack(side="left", ipady=3)
-        self.celsius = tk.BooleanVar(value=self.settings.units == "C")
-        self._check(loc, "°C", self.celsius, self._location_changed).pack(side="left", padx=(8, 0))
-        self.wmode = tk.StringVar(value=self.settings.weather_mode)
-        for value, text in (("daily", "5 days"), ("hourly", "5 hours")):
-            tk.Radiobutton(loc, text=text, value=value, variable=self.wmode, command=self._location_changed,
-                           bg=PANEL, fg=FG, selectcolor=TROUGH, activebackground=PANEL, activeforeground=FG,
-                           highlightthickness=0, bd=0, font=FONT).pack(side="left", padx=(8, 0))
+        self.units = tk.StringVar(value="°" + self.settings.units)
+        self._dropdown(loc, self.units, ["°F", "°C"], 3).pack(side="left", padx=(8, 0))
+        self.wcount = tk.StringVar(value=str(self.settings.weather_count))
+        self.count_menu = self._dropdown(loc, self.wcount, [], 2)
+        self.count_menu.pack(side="left", padx=(8, 0))
+        self.wmode = tk.StringVar(value=self.WMODES_REV[self.settings.weather_mode])
+        self._dropdown(loc, self.wmode, list(self.WMODES), 5).pack(side="left", padx=(4, 0))
+        self._fill_counts()
+        for var in (self.units, self.wcount):
+            var.trace_add("write", lambda *_: self._location_changed())
+        self.wmode.trace_add("write", lambda *_: (self._fill_counts(), self._location_changed()))
         tk.Label(box2, text="City or ZIP, e.g. 91367", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).grid(
             row=r0, column=2, columnspan=2, sticky="e", pady=(6, 0))
         tk.Label(box2, text="Options", bg=PANEL, fg=MUTED, font=FONT).grid(row=r0 + 2, column=0, sticky="w", pady=(6, 0))
         self.loop = tk.BooleanVar(value=self.settings.loop)
-        self.close_nexlinq = tk.BooleanVar(value=saved.get("close_nexlinq", True))
         self.autorun = tk.BooleanVar(value=saved.get("autorun", False))
         self._check(box2, "Loop", self.loop, self._opts_changed).grid(row=r0 + 3, column=0, sticky="w")
-        self._check(box2, "Close NexLinq on Run", self.close_nexlinq, self._schedule_save).grid(
-            row=r0 + 3, column=1, columnspan=3, sticky="w")
         self._check(box2, "Start the ticker when the app opens", self.autorun, self._schedule_save).grid(
             row=r0 + 4, column=0, columnspan=4, sticky="w")
         self.h24 = tk.BooleanVar(value=self.settings.clock_24h)
         self._check(box2, "24-hour clock", self.h24, self._opts_changed).grid(row=r0 + 5, column=0, columnspan=4, sticky="w")
 
         # counter
-        box3 = tk.Frame(outer, bg=PANEL, padx=12, pady=8)
-        box3.pack(fill="x", pady=(8, 0))
+        self.counter_slot = tk.Frame(outer, bg=BG)       # keeps the counter box's place in the layout
+        self.counter_slot.pack(fill="x")
+        self.counter_box = box3 = tk.Frame(outer, bg=PANEL, padx=12, pady=8)   # made after, so it's drawn on top
         tk.Label(box3, text="Counter", bg=PANEL, fg=MUTED, font=FONT).grid(row=0, column=0, sticky="w")
         self.count_label = tk.Label(box3, text=str(self.counter.count), bg=PANEL, fg="#ffc800",
                                     font=("Segoe UI", 16, "bold"), width=5, anchor="e")
@@ -210,12 +212,10 @@ class App:
         # small buttons
         small = tk.Frame(outer, bg=BG)
         small.pack(fill="x", pady=(10, 0))
-        buttons = [("Quit NexLinq", self.quit_nexlinq), ("Launch NexLinq", self.launch_nexlinq),
-                   ("Reset defaults", self.reset_defaults), ("Quit", self.quit),
-                   ("Quit + launch NexLinq", self.quit_and_launch)]
+        buttons = [("Quit", self.quit), ("Reset", self.reset_defaults), ("Launch NexLinq", self.launch_nexlinq)]
         for i, (text, cmd) in enumerate(buttons):
             FlatButton(small, text, cmd, bg=ACCENT, padx=8, pady=4, font=("Segoe UI", 9)).grid(
-                row=i // 3, column=i % 3, sticky="ew", padx=2, pady=2)
+                row=0, column=i, sticky="ew", padx=2, pady=2)
         for c in range(3):
             small.columnconfigure(c, weight=1)
 
@@ -227,6 +227,7 @@ class App:
         tk.Label(outer, text="Scores: ESPN  ·  Weather data by Open-Meteo.com", bg=BG, fg=MUTED,
                  font=("Segoe UI", 8)).pack(anchor="e", pady=(4, 0))
 
+        self._show_counter_box()
         err = self.counter.listen()
         if err:
             self.log(err)
@@ -238,6 +239,34 @@ class App:
             root.after(800, self.toggle_run)
 
     # ---------- widgets ----------
+    WMODES = {"days": "daily", "hours": "hourly"}
+    WMODES_REV = {v: k for k, v in WMODES.items()}
+    COUNTS = {"daily": range(1, 15), "hourly": range(1, 25)}    # Open-Meteo gives 16 days ahead
+
+    def _dropdown(self, parent, var, choices, width):
+        m = tk.OptionMenu(parent, var, *(choices or [""]))
+        m.configure(bg=TROUGH, fg=FG, activebackground=ACCENT, activeforeground=FG, relief="flat", bd=0,
+                    highlightthickness=0, font=FONT, width=width, indicatoron=True, padx=6, pady=2)
+        m["menu"].configure(bg=TROUGH, fg=FG, activebackground=SLIDER, activeforeground=FG, bd=0, font=FONT)
+        return m
+
+    def _fill_counts(self):
+        """The number dropdown offers 1-14 days or 1-24 hours, depending on the mode."""
+        counts = self.COUNTS[self.WMODES[self.wmode.get()]]
+        menu = self.count_menu["menu"]
+        menu.delete(0, "end")
+        for n in counts:
+            menu.add_command(label=str(n), command=lambda n=n: self.wcount.set(str(n)))
+        if int(self.wcount.get() or 5) not in counts:
+            self.wcount.set(str(counts[-1]))
+
+    def _show_counter_box(self):
+        if self.league_vars[COUNTER].get():
+            self.counter_box.pack(in_=self.counter_slot, fill="x", pady=(8, 0))
+        else:
+            self.counter_box.pack_forget()
+            self.counter_slot.configure(height=1)    # an emptied frame keeps its old size otherwise
+
     def _slider(self, parent, row, attr, label, lo, hi, step, cast):
         tk.Label(parent, text=label, bg=PANEL, fg=FG, font=FONT, width=17, anchor="w").grid(row=row, column=0, sticky="w")
         var = tk.DoubleVar(value=getattr(self.settings, attr))
@@ -289,12 +318,14 @@ class App:
     # ---------- settings ----------
     def _leagues_changed(self):
         self.settings.leagues = [lg for lg, v in self.league_vars.items() if v.get()]
+        self._show_counter_box()
         self._schedule_save()
 
     def _location_changed(self):
         self.settings.location = self.location.get()
-        self.settings.units = "C" if self.celsius.get() else "F"
-        self.settings.weather_mode = self.wmode.get()
+        self.settings.units = self.units.get().lstrip("°")
+        self.settings.weather_mode = self.WMODES[self.wmode.get()]
+        self.settings.weather_count = int(self.wcount.get() or 5)
         self._schedule_save()
 
     def _opts_changed(self):
@@ -313,8 +344,9 @@ class App:
         cfg = load_cfg()
         s = self.settings
         cfg["gui"] = {"speed": s.speed, "padding": s.padding, "brightness": s.brightness,
-                      "leagues": s.leagues, "loop": s.loop, "close_nexlinq": self.close_nexlinq.get(),
+                      "leagues": s.leagues, "loop": s.loop,
                       "location": s.location, "units": s.units, "weather_mode": s.weather_mode,
+                      "weather_count": s.weather_count,
                       "autorun": self.autorun.get(), "screen_seconds": s.screen_seconds,
                       "clock_24h": s.clock_24h}
         with open(CONFIG_FILE, "w") as f:
@@ -328,10 +360,10 @@ class App:
         for lg, v in self.league_vars.items():
             v.set(lg in d.leagues)
         self.loop.set(d.loop)
-        self.close_nexlinq.set(True)
         self.autorun.set(False)
-        self.celsius.set(False)
-        self.wmode.set("daily")
+        self.units.set("°" + d.units)
+        self.wmode.set(self.WMODES_REV[d.weather_mode])
+        self.wcount.set(str(d.weather_count))
         self.h24.set(False)
         self._location_changed()
         self._leagues_changed()
@@ -387,7 +419,7 @@ class App:
     def _worker(self):
         panel = None
         try:
-            if self.close_nexlinq.get() and nexlinq.running():
+            if nexlinq.running():            # it fights over the panel; skipped if it isn't installed/open
                 self.log(nexlinq.quit_nexlinq())
             from matrix.transport import Matrix
             panel = Matrix()
@@ -410,9 +442,6 @@ class App:
         if self.thread and self.thread.is_alive():
             self.stop_event.set()
             self.thread.join(timeout=5)
-
-    def quit_nexlinq(self):
-        threading.Thread(target=lambda: self.log(nexlinq.quit_nexlinq()), daemon=True).start()
 
     def launch_nexlinq(self):
         self._stop_and_wait()
@@ -473,11 +502,6 @@ class App:
                 pass
         self._closed = True
         self.root.destroy()
-
-    def quit_and_launch(self):
-        self._stop_and_wait()
-        self.launch_nexlinq()
-        self.quit()
 
 
 def already_running():

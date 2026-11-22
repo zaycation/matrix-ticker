@@ -175,7 +175,7 @@ def run_scroll(panel, args, leagues):
     settings = Settings(speed=args.speed, step=args.step, brightness=args.brightness,
                         padding=len(args.sep), leagues=leagues, loop=not args.once,
                         location=args.location, units="C" if args.celsius else "F",
-                        weather_mode="hourly" if args.hourly else "daily",
+                        weather_mode="hourly" if args.hourly else "daily", weather_count=args.count,
                         screen_seconds=args.screen_seconds, clock_24h=args.h24,
                         verbose=args.verbose, league_gap=args.league_gap)
     source = (lambda lg: DEMO.get(lg, [])) if args.demo else None
@@ -240,7 +240,8 @@ def main():
     ap.add_argument("--24h", dest="h24", action="store_true", help="24-hour clock on the dashboard")
     ap.add_argument("--location", default="", help='weather location: city, ZIP, "91367, US" or "lat,lon"')
     ap.add_argument("--celsius", action="store_true", help="weather in Celsius")
-    ap.add_argument("--hourly", action="store_true", help="weather: now + next 5 hours instead of 5 days")
+    ap.add_argument("--hourly", action="store_true", help="weather: hours ahead instead of days ahead")
+    ap.add_argument("--count", type=int, default=Settings.weather_count, help="weather: how many days/hours (default 5)")
     args = ap.parse_args()
 
     panel = None

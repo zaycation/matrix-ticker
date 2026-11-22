@@ -14,7 +14,7 @@ From source, settings live in the project folder; the installed app uses `%APPDA
 ```
 python main.py --style scroll --preview --demo --nba               # terminal preview, sample data
 python main.py --style scroll --preview --weather --location 91367 # weather preview (add --hourly)
-python main.py --style scroll --speed 13 --brightness 80           # full-color ticker on the panel
+python main.py --style scroll --speed 24 --brightness 80           # full-color ticker on the panel
 python main.py --nba --once -v                                     # one sport, one pass, verbose
 python main.py                                                     # older single-color text style
 ```
@@ -23,7 +23,7 @@ Sport flags: `--nfl --nba --mlb --wnba --ncaaw --atp --wta --weather` (combine t
 Screens: `--dashboard --calendar --counter --nowplaying`, `--screen-seconds 10`, `--24h`.
 Preview example: `python main.py --style scroll --preview --dashboard --calendar --counter`.
 Scroll style: `--speed` (px/s), `--step`, `--brightness`, `--league-gap`, `--sep`.
-Weather: `--location`, `--hourly`, `--celsius`. Ctrl+C stops and restores `layouts/default.json`.
+Weather: `--location`, `--hourly`, `--count N`, `--celsius`. Ctrl+C stops and restores `layouts/default.json`.
 
 Text style only (the original single-color ticker using the panel's text widget):
 `--calibrate`, `--speed-scale`, `--page-buffer`, `config.json` `scale` / `live_bonus`.

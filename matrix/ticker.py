@@ -24,13 +24,14 @@ FLASH_SECONDS = 3.0
 
 @dataclass
 class Settings:
-    speed: float = 13.0            # pixels per second (about 10% slower than the first version)
+    speed: float = 24.0            # pixels per second
     padding: int = 5               # spaces between games
     brightness: int = 100          # percent
     leagues: list = field(default_factory=lambda: list(ITEMS))
     location: str = ""             # weather: city, ZIP, "91367, US" or "lat,lon"
     units: str = "F"               # weather: F or C
-    weather_mode: str = "daily"    # weather: "daily" (5 days) or "hourly" (next 5 hours)
+    weather_mode: str = "daily"    # weather: "daily" (days ahead) or "hourly" (hours ahead)
+    weather_count: int = 5         # how many days / hours to show
     screen_seconds: float = 10.0   # how long each static screen (dashboard, calendar, counter) stays
     clock_24h: bool = False
     loop: bool = True
@@ -160,7 +161,7 @@ class ScrollTicker:
                     self.log("Weather: no location set, skipping.")
                 return None
             try:
-                segs = weather.segments(self.s.location, self.s.units, self.s.weather_mode)
+                segs = weather.segments(self.s.location, self.s.units, self.s.weather_mode, self.s.weather_count)
             except Exception as e:
                 self.log(f"Weather: {e}")
                 return None

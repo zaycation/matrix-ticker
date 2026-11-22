@@ -11,7 +11,7 @@ Only games happening today show up.
 
 ![A full line of scores](docs/images/ticker-line.png)
 
-**Weather** for your city: right now, sunrise and sunset, then the next 5 days or the next 5 hours.
+**Weather** for your city: right now, sunrise and sunset, then the days or hours ahead (you pick how many).
 
 ![Current weather with sunrise and sunset](docs/images/weather-now.png)
 ![5-day forecast](docs/images/weather-days.png)
@@ -53,11 +53,11 @@ That's it. It can start with Windows and sits quietly by the clock.
 Everything you change is saved. Closing the window keeps it running in the
 **system tray** (the little icons by the clock). Right-click that icon to stop it or quit.
 
-**Counter:** type a label (like `CHESTS`) and a key (like `f8`), then click **Set**.
+**Counter:** tick **COUNTER**, type a label (like `CHESTS`) and a key (like `f8`), then click **Set**.
 Press that key anytime to add one; the display shows the new count for a few seconds.
 
 **NexLinq:** Phanteks' own app can't run at the same time, so Matrix Ticker closes it when you
-press Run. Use **Launch NexLinq** to bring it back.
+press Run (if it's open). You don't need it installed. Use **Launch NexLinq** to bring it back.
 
 <br clear="right">
 
@@ -65,8 +65,8 @@ press Run. Use **Launch NexLinq** to bring it back.
 
 | What you see | What to do |
 |---|---|
-| `Error: open failed` | The display isn't found. Check that it's plugged in, and click **Quit NexLinq**. |
-| `Is NexLinq still running?` | Click **Quit NexLinq**, then **Run** again. |
+| `Error: open failed` | The display isn't found. Check that it's plugged in and NexLinq is closed. |
+| `Is NexLinq still running?` | Close NexLinq (check the tray by the clock), then **Run** again. |
 | Weather `couldn't find ...` | Try your ZIP code, or add the country: `Springfield, US`. |
 | Nothing shows up | No games today? Tick **WEATHER** or **DASHBOARD** too. |
 | Counter key doesn't work in a game | Pick a key the game doesn't use, like `f8`. |

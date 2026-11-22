@@ -1,7 +1,7 @@
 """Weather from Open-Meteo (free, no API key, non-commercial use; credit: Open-Meteo.com).
 
-Two views: "daily" = now + today and the next 4 days (highs only);
-"hourly" = now + the next 5 hours. Both also show the next sunrise and sunset.
+Two views: "daily" = now + today and the following days (highs only);
+"hourly" = now + the next few hours (how many is a setting; 5 by default). Both also show the next sunrise and sunset.
 Everything comes from one cached request.
 
 Location can be a city ("Woodland Hills"), a postal code ("91367"), either with a
@@ -84,7 +84,7 @@ def forecast(location, units="F"):
         "daily": "weather_code,temperature_2m_max,precipitation_probability_max,sunrise,sunset",
         "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
         "temperature_unit": "fahrenheit" if units == "F" else "celsius",
-        "timezone": "auto", "forecast_days": 5,
+        "timezone": "auto", "forecast_days": 16,
     })
     _wx_cache[key] = (time.time(), data)
     return name, data
@@ -127,9 +127,10 @@ def _rain(segs, pct):
         segs.append((f" {round(pct)}%", RAIN))
 
 
-def segments(location, units="F", mode="daily"):
+def segments(location, units="F", mode="daily", count=5):
     """Colored segments for the scroll ticker.
-    daily: NOW + today and the next 4 days.  hourly: NOW + the next 5 hours."""
+    daily: NOW + today and the following days (count in all).  hourly: NOW + the next count hours."""
+    count = max(1, int(count))
     name, d = forecast(location, units)
     cur = d.get("current", {})
     segs = [(name.upper(), LABEL), (" : ", style.GRAY), ("NOW ", style.GRAY),
@@ -142,16 +143,17 @@ def segments(location, units="F", mode="daily"):
         times = h.get("time", [])
         now_hour = (cur.get("time") or "")[:13]          # e.g. "2026-11-17T17"
         start = next((i for i, t in enumerate(times) if t[:13] == now_hour), 0)
-        for i in range(start + 1, min(start + 6, len(times))):
+        for i in range(start + 1, min(start + 1 + count, len(times))):
             segs += [gap, (_hour_label(times[i]) + " ", style.GRAY),
                      (font.ICON_CHAR[_icon(h["weather_code"][i], h.get("is_day", [1] * len(times))[i])], None),
                      (f" {round(h['temperature_2m'][i])}°", style.WHITE)]
             _rain(segs, (h.get("precipitation_probability") or [None] * len(times))[i])
         return segs
     daily = d.get("daily", {})
-    for i, day in enumerate(daily.get("time", [])[:5]):
+    rain = daily.get("precipitation_probability_max") or []
+    for i, day in enumerate(daily.get("time", [])[:count]):
         label = "TODAY" if i == 0 else dt.date.fromisoformat(day).strftime("%a").upper()
         segs += [gap, (label + " ", style.GRAY), (font.ICON_CHAR[_icon(daily["weather_code"][i])], None),
                  (f" {round(daily['temperature_2m_max'][i])}°", HIGH)]
-        _rain(segs, (daily.get("precipitation_probability_max") or [None] * 5)[i])
+        _rain(segs, rain[i] if i < len(rain) else None)
     return segs
