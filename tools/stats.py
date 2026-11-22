@@ -2,10 +2,10 @@
 
     python tools/stats.py
 
-Compare with Task Manager -> Performance: "CPU" utilization, and "GPU 0" temperature
-and utilization. Each meter is 15 LEDs wide; "lit" is how many of them light up.
+Compare with Task Manager -> Performance: "CPU" and "GPU 0" utilization.
+Each meter is 15 LEDs wide; the bars show how many of them light up.
   CPU meter = CPU load (0-100 %)
-  GPU meter = GPU temperature on a 30-90 C scale (falls back to GPU load if there's no temperature)
+  GPU meter = GPU load (0-100 %); temperature is printed for reference only
 Ctrl+C to stop.
 """
 import os
@@ -38,7 +38,7 @@ def main():
             cpu = system.cpu_load()
             gt, gl = system.gpu_temp(), system.gpu_load()
             cpu_n = lit((cpu or 0) / 100)
-            gpu_n = lit((gt - 30) / 60) if gt is not None else lit((gl or 0) / 100)
+            gpu_n = lit((gl or 0) / 100)
             print(f"{'-' if cpu is None else f'{cpu:.0f}%':>9}  [{bar(cpu_n)}]   "
                   f"{'-' if gt is None else f'{gt} C':>8} {'-' if gl is None else f'{gl}%':>8}  [{bar(gpu_n)}]",
                   flush=True)

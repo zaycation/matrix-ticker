@@ -27,12 +27,11 @@ def _clock_text(now, h24):
 
 def dashboard(now=None, h24=False):
     """CPU / GPU meters, big clock, date: a remake of NexLinq's widget.
-    CPU meter = CPU load. GPU meter = GPU temperature (30-90 C) on NVIDIA, else GPU load."""
+    Both meters show load (how busy, 0-100 %). GPU load needs an NVIDIA card."""
     now = now or dt.datetime.now()
     c = Canvas()
     cpu = system.cpu_load()
-    gtemp = system.gpu_temp()
-    gpu = (gtemp - 30) / 60 if gtemp is not None else (system.gpu_load() or 0) / 100
+    gpu = (system.gpu_load() or 0) / 100
     c.tiny("CPU", 0, 0, WHITE)                          # rows 0-3
     c.tiny("GPU", 0, 6, WHITE)                          # rows 6-9 (2-row gap between)
     _meter(c, 12, 0, 15, 4, (cpu or 0) / 100)

@@ -17,7 +17,7 @@ Only games happening today show up.
 ![5-day forecast](docs/images/weather-days.png)
 ![Next 5 hours](docs/images/weather-hours.png)
 
-**PC dashboard:** CPU and GPU meters, a big clock and the date.
+**PC dashboard:** CPU and GPU load meters, a big clock and the date.
 
 ![Dashboard](docs/images/dashboard.png)
 
