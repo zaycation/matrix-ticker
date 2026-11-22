@@ -178,6 +178,7 @@ def run_scroll(panel, args, leagues):
                         weather_mode="hourly" if args.hourly else "daily", weather_count=args.count,
                         screen_seconds=args.screen_seconds, clock_24h=args.h24,
                         cpu_meter=args.cpu_meter, gpu_meter=args.gpu_meter,
+                        favorites=args.favorites, favorites_only=args.only_favorites, alerts=not args.no_alerts,
                         verbose=args.verbose, league_gap=args.league_gap)
     source = (lambda lg: DEMO.get(lg, [])) if args.demo else None
     from matrix.counter import Counter
@@ -242,6 +243,9 @@ def main():
     ap.add_argument("--location", default="", help='weather location: city, ZIP, "91367, US" or "lat,lon"')
     ap.add_argument("--celsius", action="store_true", help="weather in Celsius")
     ap.add_argument("--hourly", action="store_true", help="weather: hours ahead instead of days ahead")
+    ap.add_argument("--favorites", default="", help='favorite teams, e.g. "Bears, Sparks" (listed first, starred)')
+    ap.add_argument("--only-favorites", action="store_true", help="show only games with a favorite team")
+    ap.add_argument("--no-alerts", action="store_true", help="no big-moment alerts for favorite teams")
     ap.add_argument("--cpu-meter", default=Settings.cpu_meter, choices=["load", "ram"],
                     help="dashboard top meter")
     ap.add_argument("--gpu-meter", default=Settings.gpu_meter, choices=["temp", "load", "vram", "power", "fan"],

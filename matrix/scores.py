@@ -64,6 +64,10 @@ def team_games(league):
         if league == "NCAAW" and min(rank(teams["away"]), rank(teams["home"])) > 25:
             continue
         yield {
+            "id": ev.get("id"), "league": league, "period": ev["status"].get("period") or 0,
+            # full names, for matching favorite teams ("Chicago Bears")
+            "away_name": teams["away"]["team"].get("displayName", ""),
+            "home_name": teams["home"]["team"].get("displayName", ""),
             "away": teams["away"]["team"]["abbreviation"],
             "home": teams["home"]["team"]["abbreviation"],
             # team colors as hex strings like "552583"; may be missing
@@ -102,6 +106,9 @@ def tennis_matches(tour):
                 sets = " ".join(f"{int(a['value'])}-{int(b['value'])}"
                                 for a, b in zip(p1.get("linescores", []), p2.get("linescores", [])))
                 yield {
+                    "id": m.get("id"), "league": tour, "period": 0,
+                    "away_name": ((p1.get("athlete") or {}).get("displayName") or ""),
+                    "home_name": ((p2.get("athlete") or {}).get("displayName") or ""),
                     "away": _player(p1), "home": _player(p2), "away_score": "", "home_score": "",
                     "state": state, "tennis": True, "sets": sets,
                     "detail": clock_pt(start) if state == "pre" and start else "",

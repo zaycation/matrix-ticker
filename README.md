@@ -7,7 +7,8 @@
 ## What it shows
 
 **Live scores** in team colors: NFL, NBA, MLB, WNBA, women's college basketball (top 25) and tennis Grand Slams.
-Only games happening today show up.
+Only games happening today show up. Your **favorite teams** go first with a gold star, and
+**big-moment alerts** flash on the display: kickoff, touchdowns, field goals, runs, close games late, wins.
 
 ![A full line of scores](docs/images/ticker-line.png)
 
@@ -53,6 +54,9 @@ That's it. It can start with Windows and sits quietly by the clock.
 
 Everything you change is saved. **Window opacity** (under Options) makes the window see-through. Closing the window keeps it running in the
 **system tray** (the little icons by the clock). Right-click that icon to stop it or quit.
+
+**Favorite teams:** type them under Show, like `Bears, Sparks` (team names or abbreviations).
+Turn on **Only my teams** to hide every other game. **Test alert** shows a sample on the display.
 
 **Counter:** tick **COUNTER**, type a label (like `CHESTS`) and a key (like `f8`), then click **Set**.
 Press that key anytime to add one; the display shows the new count for a few seconds.

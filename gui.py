@@ -88,7 +88,8 @@ class App:
 
         saved = load_cfg().get("gui", {})
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
-                    "weather_count", "screen_seconds", "clock_24h", "cpu_meter", "gpu_meter"):
+                    "weather_count", "screen_seconds", "clock_24h", "cpu_meter", "gpu_meter",
+                    "favorites", "favorites_only", "alerts"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
@@ -143,6 +144,23 @@ class App:
             self._check(grid, lg, v, self._leagues_changed).grid(row=i // 4, column=i % 4, sticky="w",
                                                                  padx=(0, 12), pady=3)
             self.league_vars[lg] = v
+        fav = ctk.CTkFrame(box2, fg_color="transparent")
+        fav.grid(row=2, column=0, columnspan=4, sticky="we", pady=(8, 0))
+        self.favorites = ctk.CTkEntry(fav, placeholder_text="Favorite teams, e.g. Bears, Sparks", width=230,
+                                      height=30, corner_radius=8, fg_color=FIELD, border_width=0, text_color=FG,
+                                      placeholder_text_color=MUTED, font=font())
+        if self.settings.favorites:
+            self.favorites.insert(0, self.settings.favorites)
+        for ev in ("<KeyRelease>", "<FocusOut>"):
+            self.favorites.bind(ev, lambda e: self._favorites_changed())
+        self.favorites.pack(side="left")
+        self._button(fav, "Test alert", self.test_alert, width=86, height=30).pack(side="right")
+        fsw = ctk.CTkFrame(box2, fg_color="transparent")
+        fsw.grid(row=3, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        self.fav_only = tk.BooleanVar(value=self.settings.favorites_only)
+        self.alerts_on = tk.BooleanVar(value=self.settings.alerts)
+        self._switch(fsw, "Only my teams", self.fav_only, self._favorites_changed).pack(side="left", padx=(0, 14))
+        self._switch(fsw, "Big-moment alerts", self.alerts_on, self._favorites_changed).pack(side="left")
 
         # weather
         box_w = self._card(outer, "Weather")
@@ -390,6 +408,20 @@ class App:
         self.settings.weather_count = int(self.wcount.get() or 5)
         self._schedule_save()
 
+    def _favorites_changed(self):
+        self.settings.favorites = self.favorites.get().strip()
+        self.settings.favorites_only = self.fav_only.get()
+        self.settings.alerts = self.alerts_on.get()
+        self._schedule_save()
+
+    def test_alert(self):
+        """Show a made-up Bears touchdown on the panel (the ticker must be running)."""
+        if self.ticker is None:
+            self.log("Press Run first, then Test alert.")
+            return
+        from matrix import alerts
+        self.ticker.push_alert(alerts.sample())
+
     def _meters_changed(self, _v=None):
         self.settings.cpu_meter = self.CPU_METERS[self.cpu_meter.get()]
         self.settings.gpu_meter = self.GPU_METERS[self.gpu_meter.get()]
@@ -416,7 +448,8 @@ class App:
                       "weather_count": s.weather_count,
                       "autorun": self.autorun.get(), "screen_seconds": s.screen_seconds,
                       "clock_24h": s.clock_24h, "opacity": self.opacity.get(),
-                      "cpu_meter": s.cpu_meter, "gpu_meter": s.gpu_meter}
+                      "cpu_meter": s.cpu_meter, "gpu_meter": s.gpu_meter,
+                      "favorites": s.favorites, "favorites_only": s.favorites_only, "alerts": s.alerts}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 
@@ -434,6 +467,9 @@ class App:
         self._fill_counts()
         self.wcount.set(str(d.weather_count))
         self.h24.set(False)
+        self.fav_only.set(d.favorites_only)
+        self.alerts_on.set(d.alerts)
+        self._favorites_changed()          # favorite teams themselves are kept
         self.cpu_meter.set("Load")
         self.gpu_meter.set("Temperature")
         self._meters_changed()

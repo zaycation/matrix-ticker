@@ -53,6 +53,7 @@ ICON_ROWS = {
     "sunrise": ["...o...", "..ooo..", ".......", "..yyy..", ".yyyyy.", "yyyyyyy", "hhhhhhh"],
     "sunset":  ["..ooo..", "...o...", ".......", "..yyy..", ".yyyyy.", "yyyyyyy", "hhhhhhh"],
     "note":    ["...pp..", "...p.p.", "...p..p", "...p...", ".ppp...", "pppp...", ".pp...."],
+    "star":    ["...y...", "...y...", "yyyyyyy", ".yyyyy.", "..yyy..", ".yy.yy.", ".y...y."],
 }
 ICON_CHAR = {name: chr(0xE000 + i) for i, name in enumerate(ICON_ROWS)}
 ICONS = {ICON_CHAR[name]: rows for name, rows in ICON_ROWS.items()}

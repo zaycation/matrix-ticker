@@ -6,11 +6,13 @@ leagues on the next league. Stop with stop_event.set().
 import json
 import math
 import os
+import queue
 import threading
 import time
 from dataclasses import dataclass, field
 
-from . import render, scores, screens, style, weather
+from . import alerts, favorites, render, scores, screens, style, weather
+from .font import ICON_CHAR
 
 from .paths import RESTORE_FILE
 MIN_GAP = 0.15          # the panel needs > 0.05 s after each frame; 0.15 s is proven
@@ -34,6 +36,9 @@ class Settings:
     weather_count: int = 5         # how many days / hours to show
     screen_seconds: float = 10.0   # how long each static screen (dashboard, calendar, counter) stays
     clock_24h: bool = False
+    favorites: str = ""            # favorite teams, e.g. "Bears, Sparks" (see matrix/favorites.py)
+    favorites_only: bool = False   # sports: show only games with a favorite team
+    alerts: bool = True            # flash big moments for favorite teams
     cpu_meter: str = "load"        # dashboard top meter: load, ram
     gpu_meter: str = "temp"        # dashboard bottom meter: temp, load, vram, power, fan
     loop: bool = True
@@ -52,12 +57,15 @@ def short_detail(g):
     return d
 
 
-def league_strip(league, games, padding):
-    games = sorted(games, key=lambda g: STATE_ORDER.get(g["state"], 3))
+def league_strip(league, games, padding, terms=()):
+    """terms: favorite-team terms; their games go first, marked with a gold star."""
+    games = sorted(games, key=lambda g: (favorites.side(g, terms) is None, STATE_ORDER.get(g["state"], 3)))
     segs = style.league_segments(league, games)
     for i, g in enumerate(games):
         if i:
             segs.append((" " * padding, style.WHITE))
+        if favorites.side(g, terms):
+            segs += [(ICON_CHAR["star"], None), (" ", style.WHITE)]
         segs += style.game_segments(g, short_detail)
     return render.strip(segs)
 
@@ -88,6 +96,7 @@ class ScrollTicker:
         self.stop = stop_event or threading.Event()
         self.flash = threading.Event()        # set when the counter is bumped
         self.counter = counter
+        self.alert_q, self.alert_ready = queue.Queue(), threading.Event()
         self.games_source = games_source or scores.games
         self.show = show or self._send
 
@@ -95,7 +104,7 @@ class ScrollTicker:
         """Sleep in short steps: Event.wait() can't be interrupted by Ctrl+C on Windows,
         time.sleep() can. Stops early if stop is set."""
         end = time.perf_counter() + max(0.0, seconds)
-        while not self.stop.is_set() and not self.flash.is_set():
+        while not self.stop.is_set() and not self.flash.is_set() and not self.alert_ready.is_set():
             left = end - time.perf_counter()
             if left <= 0:
                 return
@@ -112,8 +121,28 @@ class ScrollTicker:
         self.show(dim(buf, self.s.brightness))
         return time.perf_counter() - t0
 
+    def push_alert(self, alert):
+        """Queue a big-moment alert; it cuts in at the next frame (thread-safe)."""
+        self.alert_q.put(alert)
+        self.alert_ready.set()
+
+    def _show_alert(self, alert):
+        self.log("Alert: " + alert.text())
+        word, score = alerts.frames(alert)
+        for i in range(6):                     # event, score, event, ... about 5 seconds
+            if self.stop.is_set():
+                return
+            took = self._frame(word if i % 2 == 0 else score)
+            end = time.perf_counter() + max(MIN_GAP, 0.85 - took)
+            while time.perf_counter() < end and not self.stop.is_set():
+                time.sleep(0.05)
+
     def _maybe_flash(self):
-        """If the counter was just bumped, cut in and show it for a few seconds."""
+        """Cut in for alerts, and for the counter if it was just bumped."""
+        if self.alert_ready.is_set():
+            self.alert_ready.clear()
+            while not self.alert_q.empty() and not self.stop.is_set():
+                self._show_alert(self.alert_q.get())
         if not self.flash.is_set() or self.counter is None:
             self.flash.clear()
             return
@@ -175,16 +204,20 @@ class ScrollTicker:
         except Exception as e:  # network hiccup: skip this league this cycle
             self.log(f"{item}: couldn't fetch scores ({e})")
             return None
+        terms = favorites.parse(self.s.favorites)
+        if self.s.favorites_only and terms:
+            games = [g for g in games if favorites.side(g, terms)]
         if not games:
             if self.s.verbose:
-                self.log(f"{item}: no games today")
+                self.log(f"{item}: no {'favorite-team ' if self.s.favorites_only and terms else ''}games today")
             return None
-        cols = league_strip(item, games, self.s.padding)
+        cols = league_strip(item, games, self.s.padding, terms)
         self.log(f"{item}: {len(games)} game{'s' if len(games) != 1 else ''}"
                  + (f", {len(cols)} px" if self.s.verbose else ""))
         return cols
 
     def run(self):
+        alerts.Watcher(self.s, self.push_alert, self.stop, self.games_source, self.log).start()
         while not self.stop.is_set():
             shown_any = False
             for item in list(self.s.leagues):
