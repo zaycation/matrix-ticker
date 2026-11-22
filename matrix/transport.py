@@ -83,15 +83,21 @@ class Matrix:
         """log: pass a list to record every packet written and read."""
         self.dev = hid.device()
         self.dev.open(VID, PID)
+        self.inexact_replies = 0     # replies that weren't exact echoes (newer firmware)
         if log is not None:
             self.dev = _LoggedDevice(self.dev, log)
 
     def _wait_echo(self, pkt, timeout=1.0):
+        """Wait for the panel's reply to pkt. The original firmware echoes each packet
+        exactly; newer firmware (replacement panels) sometimes replies with a different
+        packet. Any reply that isn't NexLinq's 06 heartbeat counts as received."""
         deadline = time.perf_counter() + timeout
         while time.perf_counter() < deadline:
             r = bytes(self.dev.read(64, timeout_ms=200))
-            if r and not (r[1] == 0x06 and pkt[1] != 0x06):  # skip NexLinq's heartbeat echoes
-                return r == pkt
+            if r and not (r[1] == 0x06 and pkt[1] != 0x06):
+                if r != pkt:
+                    self.inexact_replies += 1
+                return True
         return False
 
     def show_text(self, text, **kw):
@@ -125,22 +131,18 @@ class Matrix:
                 self.dev.write(pkt)
                 sent.add(pkt)
                 if not self._wait_echo(pkt):
-                    return False, f"no echo for {pkt[1]:02x}; stopped before sending image data"
+                    return False, f"no reply to {pkt[1]:02x}; stopped before sending image data"
                 if careful:
                     time.sleep(max(0.0, pause - (time.perf_counter() - t0)))
+        missing = 0
         for pkt in data:
-            t0 = time.perf_counter()
-            n = self.dev.write(pkt)
+            self.dev.write(pkt)
             sent.add(pkt)
-            ok, sk, odd = self._echo_detail(pkt, sent)
-            skipped += sk
-            if not ok:
-                ms = (time.perf_counter() - t0) * 1000
-                lines = [f"data packet {pkt[4]}: write returned {n}, waited {ms:.0f} ms, "
-                         f"{'got an unexpected packet (is NexLinq running?)' if odd else 'timed out'}",
-                         f"  sent: {pkt[:12].hex(' ')} ..."]
-                lines += [f"  read: {r[:12].hex(' ')} ..." for r in odd] or ["  read: (nothing)"]
-                return False, "\n".join(lines) + "\nstopped before the 03 show packet"
+            if not self._wait_echo(pkt, timeout=0.3):
+                missing += 1
+                if missing > 10:
+                    return False, (f"the panel stopped answering after data packet {pkt[4]}; "
+                                   "stopped before the 03 show packet (is NexLinq running?)")
         if careful:
             ok, extra, bad = self._wait_quiet(sent)
             if not ok:
@@ -149,7 +151,8 @@ class Matrix:
             return True, "ok (data only, no 03)"
         self.dev.write(widget)
         ok = self._wait_echo(widget)
-        return ok, ("ok" if ok else "no echo for 03") + (f", skipped {skipped} repeated echoes" if skipped else "")
+        notes = [f"{missing} data packets unanswered"] if missing else []
+        return True, "ok" + (f" ({', '.join(notes)})" if notes else "") + ("" if ok else ", no reply to 03")
 
     def _echo_detail(self, pkt, sent=(), timeout=0.5):
         """Wait for pkt's echo. Heartbeats and late/repeated echoes of packets in
