@@ -69,7 +69,8 @@ scrolls by (green when you're winning), and with alerts on, a starter's big play
 `J. ALLEN +6.4`. Type part of a league name to show just that league.
 
 **Messages from a phone:** tick **MESSAGES**. The app makes a private link (Messages section →
-**Copy**). Anything sent to that link pops up on the display with a heart and the sender's name,
+**Copy**). Anything sent to that link flashes the whole display pink and white, then scrolls by with a
+heart and the sender's name,
 then stays in the cycle until midnight (or **Clear**). Emoji are dropped (the LEDs can't draw them).
 Anyone with the link can send, so only share it with people you want; **New link** replaces it.
 
