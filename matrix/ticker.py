@@ -112,7 +112,7 @@ class ScrollTicker:
         time.sleep() can. Stops early if stop is set."""
         end = time.perf_counter() + max(0.0, seconds)
         while (not self.stop.is_set() and not self.flash.is_set() and not self.alert_ready.is_set()
-               and not (self.timer is not None and (self.timer.active() or self.timer._finished.is_set()))):
+               and not (self._timer_on() and (self.timer.active() or self.timer._finished.is_set()))):
             left = end - time.perf_counter()
             if left <= 0:
                 return
@@ -145,15 +145,19 @@ class ScrollTicker:
             while time.perf_counter() < end and not self.stop.is_set():
                 time.sleep(0.05)
 
+    def _timer_on(self):
+        """The timer only shows when TIMER is ticked."""
+        return self.timer is not None and TIMER in self.s.leagues
+
     def _timer_takeover(self):
         """While the timer runs (or is paused) show it full-time; flash TIME'S UP at zero."""
-        t = self.timer
-        if t is None:
+        if not self._timer_on():
             return
+        t = self.timer
         if t.active():
             self.log(f"Timer: {t.label}")
             blink = False
-            while t.active() and not self.stop.is_set():
+            while t.active() and self._timer_on() and not self.stop.is_set():
                 took = self._frame(screens.timer(t.label, t.remaining(), t.progress(), t.paused(), blink))
                 blink = not blink
                 if self.alert_ready.is_set() or self.flash.is_set():
@@ -192,6 +196,8 @@ class ScrollTicker:
 
     def _screen(self, item):
         """Show a static screen for screen_seconds, redrawing about once a second."""
+        if self.stop.is_set():
+            return False
         if item == COUNTER and self.counter is None:
             return False
         if item == TIMER:
@@ -200,6 +206,8 @@ class ScrollTicker:
         end = time.perf_counter() + self.s.screen_seconds
         while time.perf_counter() < end and not self.stop.is_set():
             self._maybe_flash()
+            if self.stop.is_set():
+                break
             if item == DASHBOARD:
                 buf = screens.dashboard(h24=self.s.clock_24h, cpu_meter=self.s.cpu_meter, gpu_meter=self.s.gpu_meter)
             elif item == CALENDAR:

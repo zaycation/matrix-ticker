@@ -584,6 +584,9 @@ class App:
     # ---------- settings ----------
     def _leagues_changed(self):
         self.settings.leagues = [lg for lg, v in self.league_vars.items() if v.get()]
+        if TIMER not in self.settings.leagues and self.timer.active():
+            self.timer.reset()                 # unticking TIMER also cancels a running or paused timer
+            self.log("Timer cancelled.")
         self._show_counter_box()
         self._schedule_save()
 
