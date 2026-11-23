@@ -328,12 +328,15 @@ class ScrollTicker:
         """Scroll a strip across once. interruptible: alerts and the counter may cut in
         (not while showing an alert itself). Returns False if stopped."""
         offset = -render.W
-        while offset <= len(cols):
+        while True:
             if self.stop.is_set():
                 return False
             if interruptible:
                 self._maybe_flash()
             upload = self._frame(render.frame(cols, offset))
+            if offset >= len(cols):
+                return True                    # that frame was empty: the text has fully left
+
             # If the speed asks for more than step px per achievable frame, move further per frame.
             speed = max(1.0, self.s.speed)
             step = max(self.s.step, math.ceil(speed * (upload + MIN_GAP)))
@@ -344,8 +347,9 @@ class ScrollTicker:
                 end = time.perf_counter() + pause
                 while time.perf_counter() < end and not self.stop.is_set():
                     time.sleep(0.02)
-            offset += step
-        return True
+            # never jump past the end: the last frame lands exactly where nothing is left on screen,
+            # so the tail of the text (e.g. the M of PM) can't sit on the edge during the pause
+            offset = min(offset + step, len(cols))
 
     def run(self):
         quakes.Watcher(self.s, self.push_alert, self.stop, self.log).start()
