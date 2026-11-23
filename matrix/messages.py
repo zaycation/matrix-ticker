@@ -27,6 +27,7 @@ BASE = "https://ntfy.sh"
 POLL_S = 10
 MESSAGE_FILE = os.path.join(DATA_DIR, "message.json")
 PINK = (255, 90, 150)
+ATTENTION = (PINK, (255, 255, 255)) * 5    # pink, white, five times, before the message scrolls
 MAX_CHARS = 200
 
 
@@ -136,7 +137,7 @@ class Watcher(threading.Thread):
                 state.update(last_id=m.get("id"), current={"sender": sender, "text": text,
                                                            "time": m.get("time", int(time.time()))})
                 _save(state)
-            self.on_alert(Alert("MESSAGE", PINK, scroll=segments(sender, text),
+            self.on_alert(Alert("MESSAGE", PINK, scroll=segments(sender, text), flash=ATTENTION,
                                 log_text=f"Message from {sender or 'phone'}: {text}"))
 
     def run(self):

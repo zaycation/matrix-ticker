@@ -22,6 +22,7 @@ DASHBOARD, CALENDAR, COUNTER, TIMER = "DASHBOARD", "CALENDAR", "COUNTER", "TIMER
 SCREENS = [DASHBOARD, CALENDAR, COUNTER, TIMER]            # static screens, shown for screen_seconds
 ITEMS = list(scores.ALL) + [MESSAGES, FANTASY, MEETINGS, WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
 FLASH_SECONDS = 3.0
+FLASH_STEP_S = 0.25            # each color of an attention flash (the panel can't go much faster)
 
 
 @dataclass
@@ -138,8 +139,20 @@ class ScrollTicker:
         self.alert_q.put(alert)
         self.alert_ready.set()
 
+    def _flash_panel(self, colors):
+        """Fill the whole panel with each color in turn, as fast as the panel allows."""
+        for rgb in colors:
+            if self.stop.is_set():
+                return
+            took = self._frame(bytes(rgb) * (render.W * render.H))
+            end = time.perf_counter() + max(MIN_GAP, FLASH_STEP_S - took)
+            while time.perf_counter() < end and not self.stop.is_set():
+                time.sleep(0.02)
+
     def _show_alert(self, alert):
         self.log("Alert: " + alert.text())
+        if alert.flash:
+            self._flash_panel(alert.flash)
         if alert.scroll:
             self._scroll(render.strip(alert.scroll), interruptible=False)
             return

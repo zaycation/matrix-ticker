@@ -30,10 +30,13 @@ class Alert:
     game: dict = None      # the game as it is now (score alerts)
     lines: tuple = None    # or: ready-made screens, each a list of (text, rgb) segments
     log_text: str = None
-    scroll: list = None    # or: segments that scroll across once (long text, e.g. a headline)
+    scroll: list = None    # or: segments that scroll across once (long text, e.g. a message)
+    flash: tuple = None    # optional: whole-panel colors shown first, in order (to grab attention)
 
     def text(self):
-        return self.log_text or f"{self.word}: {score_line(self.game)}"
+        if self.log_text:
+            return self.log_text
+        return f"{self.word}: {score_line(self.game)}" if self.game else self.word
 
 
 def _int(v):
