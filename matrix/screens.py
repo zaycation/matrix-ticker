@@ -22,6 +22,21 @@ def _gradient(t):
     return tuple(round(a[k] + (b[k] - a[k]) * t) for k in range(3))
 
 
+def _widget(c, y, label, frac):
+    """NexLinq's CPU/GPU widget: a 4-row label, then a white outlined box with a 2-row
+    green -> yellow -> red bar inside (12 long). Columns 0-28, rows y..y+3."""
+    end = c.label(label, 0, y, WHITE)                  # 3 letters: x 0-13
+    left, inner = end + 2, 12                          # end cap, then the bar
+    for i in range(inner):
+        c.set(left + 1 + i, y, WHITE)                  # top edge
+        c.set(left + 1 + i, y + 3, WHITE)              # bottom edge
+    for yy in (y + 1, y + 2):
+        c.set(left, yy, WHITE)                         # end caps
+        c.set(left + inner + 1, yy, WHITE)
+    _meter(c, left + 1, y + 1, inner, 2, frac)
+    return left + inner + 2                            # first free column
+
+
 def _meter(c, x, y, w, h, frac):
     """NexLinq-style bar: each lit column takes its color from its place along the bar,
     so a low reading is all green and a high one runs through yellow into red."""
@@ -73,15 +88,13 @@ def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="temp", corner="b
     c = Canvas()
     top_label, top = system.CPU_METERS.get(cpu_meter, system.CPU_METERS["load"])
     bottom_label, bottom = system.GPU_METERS.get(gpu_meter, system.GPU_METERS["temp"])
-    c.tiny(top_label, 0, 0, WHITE)                      # rows 0-3
-    c.tiny(bottom_label, 0, 6, WHITE)                   # rows 6-9 (2-row gap between)
-    _meter(c, 12, 0, 15, 4, top() or 0)
-    _meter(c, 12, 6, 15, 4, bottom() or 0)
+    widget_end = _widget(c, 1, top_label, top() or 0)  # rows 1-4
+    _widget(c, 6, bottom_label, bottom() or 0)        # rows 6-9 (row 5 between)
     show_ping = corner == "ping" or (corner == "both" and int(time.time() // CORNER_SWAP_S) % 2 == 1)
     if not (show_ping and _ping_corner(c)):
         _date_corner(c, now)
     clock = _clock_text(now, h24)
-    left, right = 28, RIGHT - CORNER_W - 2                  # center the clock in the gap
+    left, right = widget_end + 1, RIGHT - CORNER_W - 2                  # center the clock in the gap
     c.big(clock, left + max(0, (right - left - big_width(clock)) // 2), WHITE)
     return c.to_bytes()
 

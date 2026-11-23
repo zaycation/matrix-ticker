@@ -34,13 +34,13 @@ SMALL = {
     "+": ["...", ".#.", "###", ".#.", "..."], "'": ["#", "#", ".", ".", "."],
 }
 # 3x4 letters for labels that need a gap between two lines (dashboard CPU / GPU)
-TINY = {
-    "C": [".##", "#..", "#..", ".##"], "P": ["##.", "#.#", "##.", "#.."],
-    "U": ["#.#", "#.#", "#.#", "###"], "G": [".##", "#..", "#.#", ".##"],
-    "R": ["##.", "#.#", "##.", "#.#"], "A": [".#.", "#.#", "###", "#.#"],
-    "M": ["#.#", "###", "#.#", "#.#"], " ": ["..", "..", "..", ".."],
+# Dashboard meter labels, 4x4: NexLinq's CPU/GPU widget letter shapes, single-stroke.
+LABEL = {
+    "C": [".###", "#...", "#...", ".###"], "P": ["####", "#..#", "####", "#..."],
+    "U": ["#..#", "#..#", "#..#", "####"], "G": ["####", "#...", "#..#", "####"],
+    "R": ["###.", "#..#", "###.", "#..#"], "A": [".##.", "#..#", "####", "#..#"],
+    "M": ["#..#", "####", "#..#", "#..#"], " ": ["....", "....", "....", "...."],
 }
-
 
 class Canvas:
     def __init__(self):
@@ -68,10 +68,10 @@ class Canvas:
             x += len(rows[0]) + 1
         return x - 1
 
-    def tiny(self, text, x, y, rgb):
-        """3x4 text at (x, y) = top-left. Returns the x after the text."""
+    def label(self, text, x, y, rgb):
+        """4x4 meter label at (x, y) = top-left. Returns the x after the text."""
         for ch in text.upper():
-            rows = TINY.get(ch, TINY[" "])
+            rows = LABEL.get(ch, LABEL[" "])
             for dy, row in enumerate(rows):
                 for dx, c in enumerate(row):
                     if c == "#":
