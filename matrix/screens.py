@@ -26,6 +26,8 @@ def _clock_text(now, h24):
     return now.strftime("%H:%M") if h24 else f"{now.hour % 12 or 12}:{now.minute:02d}"
 
 
+RIGHT = W                              # right-aligned content ends just before this x
+PAIR_GAP = 2                           # columns between "NOV" and "23", and "5" and "MS"
 CORNER_SWAP_S = 4                      # "both": switch between date and ping this often
 CORNER_W = 32                          # right-hand corner width, so the clock never shifts
 
@@ -41,17 +43,17 @@ def _ping_corner(c):
         text = f"{ms:.0f}"
         color = (37, 200, 100) if ms < network.GOOD_MS else GOLD if ms < network.OK_MS else RED
     unit = "" if ms is None else "MS"
-    w = normal_width(text) + (1 + normal_width(unit) if unit else 0)
-    x = c.normal(text, W - w, 1, color)
+    w = normal_width(text) + (PAIR_GAP + normal_width(unit) if unit else 0)
+    x = c.normal(text, RIGHT - w, 1, color)
     if unit:
-        c.normal(unit, x + 2, 1, WHITE)
+        c.normal(unit, x + PAIR_GAP, 1, WHITE)
     return True
 
 
 def _date_corner(c, now):
     month, day = MONTHS[now.month - 1], str(now.day)
-    x = c.normal(month, W - (normal_width(month) + 1 + normal_width(day)), 1, WHITE)
-    c.normal(day, x + 2, 1, CYAN)
+    x = c.normal(month, RIGHT - (normal_width(month) + PAIR_GAP + normal_width(day)), 1, WHITE)
+    c.normal(day, x + PAIR_GAP, 1, CYAN)
 
 
 def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="temp", corner="both"):
@@ -69,7 +71,7 @@ def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="temp", corner="b
     if not (show_ping and _ping_corner(c)):
         _date_corner(c, now)
     clock = _clock_text(now, h24)
-    left, right = 28, W - CORNER_W - 2                  # center the clock in the gap
+    left, right = 28, RIGHT - CORNER_W - 2                  # center the clock in the gap
     c.big(clock, left + max(0, (right - left - big_width(clock)) // 2), WHITE)
     return c.to_bytes()
 
@@ -101,7 +103,7 @@ def counter(label, count, flash=False, blink=False):
     c.normal(label, 0, 1, CYAN)
     num = str(count)
     color = WHITE if (flash and blink) else GOLD
-    x = W - big_width(num)
+    x = RIGHT - big_width(num)
     c.big(num, x, color)
     if flash:
         c.small("+1", x - small_width("+1") - 2, 0, (37, 184, 100))
@@ -115,7 +117,7 @@ def timer(label, remaining, progress, paused=False, blink=False):
     c = Canvas()
     text = clock(remaining)
     color = GRAY if paused else (RED if remaining <= 60 else WHITE)
-    x = W - big_width(text)
+    x = RIGHT - big_width(text)
     c.big(text, x, color, top=0, height=8)
     name = "PAUSED" if paused and blink else (label.upper()[:10] or "TIMER")
     room = x - 3
