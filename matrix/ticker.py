@@ -11,16 +11,16 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from . import alerts, favorites, meetings, news, quakes, render, scores, screens, sleeper, style, weather
+from . import alerts, favorites, meetings, quakes, render, scores, screens, sleeper, style, weather
 from .font import ICON_CHAR
 
 from .paths import RESTORE_FILE
 MIN_GAP = 0.15          # the panel needs > 0.05 s after each frame; 0.15 s is proven
 STATE_ORDER = {"in": 0, "post": 1, "pre": 2}
-WEATHER, NOWPLAYING, FANTASY, MEETINGS, NEWS = "WEATHER", "NOW PLAYING", "FANTASY", "MEETINGS", "NEWS"
+WEATHER, NOWPLAYING, FANTASY, MEETINGS = "WEATHER", "NOW PLAYING", "FANTASY", "MEETINGS"
 DASHBOARD, CALENDAR, COUNTER, TIMER = "DASHBOARD", "CALENDAR", "COUNTER", "TIMER"
 SCREENS = [DASHBOARD, CALENDAR, COUNTER, TIMER]            # static screens, shown for screen_seconds
-ITEMS = list(scores.ALL) + [NEWS, FANTASY, MEETINGS, WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
+ITEMS = list(scores.ALL) + [FANTASY, MEETINGS, WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
 FLASH_SECONDS = 3.0
 
 
@@ -44,7 +44,6 @@ class Settings:
     calendar_url: str = ""         # private iCal link for MEETINGS (see matrix/meetings.py)
     meeting_window: int = 90       # show meetings starting within this many minutes
     meeting_alert: int = 5         # reminder this many minutes before (0 = off)
-    news_alerts: str = "all"       # breaking-news cut-ins: "all", "mine" (favorite teams), "off"
     quake_alerts: bool = True      # earthquake cut-ins near the weather location
     quake_radius: int = 50         # miles
     keep_awake: bool = True        # hold off automatic Windows sleep while running (monitors may still turn off)
@@ -238,19 +237,6 @@ class ScrollTicker:
             cols = render.strip(segs)
             self.log("Now playing" + (f", {len(cols)} px" if self.s.verbose else ""))
             return cols
-        if item == NEWS:
-            try:
-                segs = news.segments([x for x in self.s.leagues if x in news.PATHS], favorites.parse(self.s.favorites))
-            except Exception as e:
-                self.log(f"News: {e}")
-                return None
-            if not segs:
-                if self.s.verbose:
-                    self.log("News: no recent headlines (tick a sport to get its news)")
-                return None
-            cols = render.strip(segs)
-            self.log("News" + (f", {len(cols)} px" if self.s.verbose else ""))
-            return cols
         if item == MEETINGS:
             if not self.s.calendar_url.strip():
                 if self.s.verbose:
@@ -339,7 +325,6 @@ class ScrollTicker:
         return True
 
     def run(self):
-        news.Watcher(self.s, self.push_alert, self.stop, self.log).start()
         quakes.Watcher(self.s, self.push_alert, self.stop, self.log).start()
         alerts.Watcher(self.s, self.push_alert, self.stop, self.games_source, self.log).start()
         sleeper.Watcher(self.s, self.push_alert, self.stop, self.log).start()
