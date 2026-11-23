@@ -19,7 +19,7 @@ from tkinter import filedialog
 
 import customtkinter as ctk
 
-from matrix import nexlinq, power, updates
+from matrix import autostart, nexlinq, power, updates
 from matrix.counter import Counter
 from matrix.timer import Timer, clock
 from matrix.ticker import COUNTER, FANTASY, ITEMS, MEETINGS, TIMER, ScrollTicker, Settings, restore_layout
@@ -249,12 +249,14 @@ class App:
         self.autorun = tk.BooleanVar(value=saved.get("autorun", False))
         self.h24 = tk.BooleanVar(value=self.settings.clock_24h)
         self.awake = tk.BooleanVar(value=self.settings.keep_awake)
+        self.on_boot = tk.BooleanVar(value=autostart.enabled())
         sw = ctk.CTkFrame(box_o, fg_color="transparent")
         sw.grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 2))
         for i, (text, var, cmd) in enumerate((("Loop", self.loop, self._opts_changed),
                                               ("24-hour clock", self.h24, self._opts_changed),
-                                              ("Run when the app opens", self.autorun, self._schedule_save),
-                                              ("Keep PC awake while running", self.awake, self._opts_changed))):
+                                              ("Start ticker when app opens", self.autorun, self._schedule_save),
+                                              ("Keep PC awake while running", self.awake, self._opts_changed),
+                                              ("Open when Windows starts", self.on_boot, self._boot_changed))):
             self._switch(sw, text, var, cmd).grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 14), pady=2)
         self.opacity = tk.IntVar(value=int(saved.get("opacity", DEFAULT_OPACITY)))
         self._row_slider(box_o, 2, "Window opacity", self.opacity, 60, 100, 5, "%", self._opacity_changed)
@@ -615,6 +617,15 @@ class App:
         self.settings.cpu_meter = self.CPU_METERS[self.cpu_meter.get()]
         self.settings.gpu_meter = self.GPU_METERS[self.gpu_meter.get()]
         self._schedule_save()
+
+    def _boot_changed(self):
+        err = autostart.set_enabled(self.on_boot.get())
+        if err:
+            self.on_boot.set(autostart.enabled())
+            self.log(err)
+        else:
+            self.log("Opens when Windows starts (in the tray)." if self.on_boot.get()
+                     else "Won't open when Windows starts.")
 
     def _opts_changed(self):
         self.settings.loop = self.loop.get()

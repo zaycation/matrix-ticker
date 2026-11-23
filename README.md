@@ -67,6 +67,9 @@ Settings → your calendar → *Secret address in iCal format*). Meetings show u
 within the next 90 minutes (you can change that), and a reminder flashes 5 minutes before.
 All-day events, cancelled meetings and ones you declined are skipped.
 
+**Open when Windows starts** (under Options): Matrix Ticker opens in the tray when you sign in.
+Turn on **Start ticker when app opens** too, and the display starts on its own after every boot.
+
 **Keep PC awake** (on by default): while the ticker runs, Windows won't go to sleep on its own,
 though your monitors can still turn off. If you put the PC to sleep yourself, the display goes dark
 with it and the ticker picks back up when the PC wakes.
