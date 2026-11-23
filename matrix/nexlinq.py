@@ -6,6 +6,7 @@ so it can be relaunched later.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -21,7 +22,21 @@ def _ps(command):
 
 
 def running():
-    """[(name, pid, exe_path)] of NexLinq processes."""
+    """[(name, pid, exe_path)] of NexLinq processes. Uses psutil (fast, fine to call often);
+    falls back to PowerShell if psutil isn't installed."""
+    try:
+        import psutil
+    except ImportError:
+        return _running_ps()
+    procs = []
+    for p in psutil.process_iter(["name", "pid", "exe"]):
+        name = p.info.get("name") or ""
+        if re.search(NAME_MATCH, name, re.I):
+            procs.append((os.path.splitext(name)[0], p.info["pid"], p.info.get("exe") or ""))
+    return procs
+
+
+def _running_ps():
     out = _ps(f"Get-Process | Where-Object {{ $_.ProcessName -match '{NAME_MATCH}' }} | "
               "ForEach-Object { \"$($_.ProcessName)|$($_.Id)|$($_.Path)\" }")
     procs = []

@@ -848,6 +848,18 @@ class App:
             self.stop_event.set()
 
     RECONNECT_S = 10
+    NEXLINQ_CHECK_S = 5
+
+    def _nexlinq_watch(self, stop):
+        """While the ticker runs, close NexLinq if it starts (e.g. Windows starts it a little
+        after us at boot); it would fight us over the panel."""
+        while not stop.wait(self.NEXLINQ_CHECK_S):
+            try:
+                if nexlinq.running():
+                    self.log("NexLinq started on its own; closed it so the ticker keeps the display.")
+                    nexlinq.quit_nexlinq()
+            except Exception:
+                pass
 
     def _worker(self):
         """Run the ticker; if the display drops out (e.g. the PC slept), reconnect and carry on."""
@@ -858,6 +870,7 @@ class App:
         try:
             if nexlinq.running():            # it fights over the panel; skipped if it isn't installed/open
                 self.log(nexlinq.quit_nexlinq())
+            threading.Thread(target=self._nexlinq_watch, args=(stop,), daemon=True).start()
             from matrix.transport import Matrix
             while not stop.is_set():
                 panel = None
