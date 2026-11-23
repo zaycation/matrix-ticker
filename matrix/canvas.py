@@ -33,7 +33,6 @@ SMALL = {
     "°": [".#.", "#.#", ".#.", "...", "..."], " ": ["..", "..", "..", "..", ".."],
     "+": ["...", ".#.", "###", ".#.", "..."], "'": ["#", "#", ".", ".", "."],
 }
-# 3x4 letters for labels that need a gap between two lines (dashboard CPU / GPU)
 # Dashboard meter labels, 4x4: NexLinq's CPU/GPU widget letter shapes, single-stroke.
 LABEL = {
     "C": [".###", "#...", "#...", ".###"], "P": ["####", "#..#", "####", "#..."],
