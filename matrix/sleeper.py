@@ -43,9 +43,10 @@ def _get(path, ttl):
 
 
 def clean(name, n=12):
-    """Uppercase, only characters the panel font has, trimmed."""
-    s = re.sub(r"[^A-Z0-9 .'-]", "", (name or "").upper()).strip()
-    return re.sub(r"\s+", " ", s)[:n].strip() or "?"
+    """Uppercase, only characters the panel font can draw, trimmed."""
+    from .font import GLYPHS
+    s = "".join(ch for ch in (name or "").upper() if ch == " " or (ch in GLYPHS and ord(ch) < 128))
+    return re.sub(r"\s+", " ", s).strip()[:n].strip() or "?"
 
 
 # ---------- players (names for live updates) ----------

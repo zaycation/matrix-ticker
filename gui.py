@@ -12,16 +12,17 @@ import json
 import queue
 import sys
 import threading
+import time
 import tkinter as tk
 import webbrowser
 from tkinter import filedialog
 
 import customtkinter as ctk
 
-from matrix import nexlinq, updates
+from matrix import nexlinq, power, updates
 from matrix.counter import Counter
 from matrix.timer import Timer, clock
-from matrix.ticker import COUNTER, FANTASY, ITEMS, TIMER, ScrollTicker, Settings, restore_layout
+from matrix.ticker import COUNTER, FANTASY, ITEMS, MEETINGS, TIMER, ScrollTicker, Settings, restore_layout
 from matrix.version import __version__
 
 try:
@@ -81,6 +82,8 @@ class App:
     WMODES_REV = {v: k for k, v in WMODES.items()}
     COUNTS = {"daily": range(1, 15), "hourly": range(1, 25)}    # Open-Meteo gives 16 days ahead
     CPU_METERS = {"Load": "load", "RAM": "ram"}
+    REMIND = {"Off": 0, "2 min before": 2, "5 min before": 5, "10 min before": 10, "15 min before": 15}
+    REMIND_REV = {v: k for k, v in REMIND.items()}
     GPU_METERS = {"Temperature": "temp", "Load": "load", "VRAM": "vram", "Power": "power", "Fan": "fan"}
 
     def __init__(self, root):
@@ -92,7 +95,8 @@ class App:
         saved = load_cfg().get("gui", {})
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
                     "weather_count", "screen_seconds", "clock_24h", "cpu_meter", "gpu_meter",
-                    "favorites", "favorites_only", "alerts", "sleeper_user", "sleeper_league"):
+                    "favorites", "favorites_only", "alerts", "sleeper_user", "sleeper_league", "keep_awake", "calendar_url", "meeting_window",
+                    "meeting_alert"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
@@ -244,12 +248,14 @@ class App:
         self.loop = tk.BooleanVar(value=self.settings.loop)
         self.autorun = tk.BooleanVar(value=saved.get("autorun", False))
         self.h24 = tk.BooleanVar(value=self.settings.clock_24h)
+        self.awake = tk.BooleanVar(value=self.settings.keep_awake)
         sw = ctk.CTkFrame(box_o, fg_color="transparent")
         sw.grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 2))
-        for text, var, cmd in (("Loop", self.loop, self._opts_changed),
-                               ("24-hour clock", self.h24, self._opts_changed),
-                               ("Run when the app opens", self.autorun, self._schedule_save)):
-            self._switch(sw, text, var, cmd).pack(side="left", padx=(0, 14))
+        for i, (text, var, cmd) in enumerate((("Loop", self.loop, self._opts_changed),
+                                              ("24-hour clock", self.h24, self._opts_changed),
+                                              ("Run when the app opens", self.autorun, self._schedule_save),
+                                              ("Keep PC awake while running", self.awake, self._opts_changed))):
+            self._switch(sw, text, var, cmd).grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 14), pady=2)
         self.opacity = tk.IntVar(value=int(saved.get("opacity", DEFAULT_OPACITY)))
         self._row_slider(box_o, 2, "Window opacity", self.opacity, 60, 100, 5, "%", self._opacity_changed)
         meters = ctk.CTkFrame(box_o, fg_color="transparent")
@@ -263,6 +269,30 @@ class App:
         self._dropdown(meters, self.cpu_meter, list(self.CPU_METERS), 84, self._meters_changed).pack(side="left")
         ctk.CTkLabel(meters, text="GPU", text_color=MUTED, font=font(12)).pack(side="left", padx=(12, 4))
         self._dropdown(meters, self.gpu_meter, list(self.GPU_METERS), 128, self._meters_changed).pack(side="left")
+
+        # meetings (only shown when MEETINGS is ticked)
+        self.meetings_box = box_m = self._card(right, "Meetings (calendar)", pack=False)
+        self.cal_url = ctk.CTkEntry(box_m, placeholder_text="Paste your calendar's secret iCal link", width=470,
+                                    height=30, corner_radius=8, fg_color=FIELD, border_width=0, text_color=FG,
+                                    placeholder_text_color=MUTED, font=font(), show="")
+        if self.settings.calendar_url:
+            self.cal_url.insert(0, self.settings.calendar_url)
+        self.cal_url.configure(show="•" if self.settings.calendar_url else "")
+        for ev in ("<KeyRelease>", "<FocusOut>"):
+            self.cal_url.bind(ev, lambda _e: self._meetings_changed())
+        self.cal_url.grid(row=1, column=0, columnspan=4, sticky="w")
+        mrow = ctk.CTkFrame(box_m, fg_color="transparent")
+        mrow.grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        ctk.CTkLabel(mrow, text="Show meetings within", text_color=FG, font=font(12)).pack(side="left")
+        self.m_window = tk.StringVar(value=f"{self.settings.meeting_window} min")
+        self._dropdown(mrow, self.m_window, ["30 min", "60 min", "90 min", "120 min", "180 min"], 100,
+                       lambda _v: self._meetings_changed()).pack(side="left", padx=(6, 12))
+        ctk.CTkLabel(mrow, text="Reminder", text_color=FG, font=font(12)).pack(side="left")
+        self.m_alert = tk.StringVar(value=self.REMIND_REV.get(self.settings.meeting_alert, "5 min before"))
+        self._dropdown(mrow, self.m_alert, list(self.REMIND), 140,
+                       lambda _v: self._meetings_changed()).pack(side="left", padx=(6, 0))
+        ctk.CTkLabel(box_m, text="Google Calendar: Settings → your calendar → Secret address in iCal format",
+                     text_color=MUTED, font=font(11)).grid(row=3, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
         # fantasy (only shown when FANTASY is ticked)
         self.fantasy_box = box_f = self._card(right, "Fantasy (Sleeper)", pack=False)
@@ -438,7 +468,8 @@ class App:
                 t.pack(fill="x", pady=(8, 0))
         else:
             t.pack_forget()
-        cards = [(self.fantasy_box.card, FANTASY), (self.counter_box.card, COUNTER)]
+        cards = [(self.meetings_box.card, MEETINGS), (self.fantasy_box.card, FANTASY),
+                 (self.counter_box.card, COUNTER)]
         wanted = [c for c, item in cards if self.league_vars[item].get()]
         if [c for c, _ in cards if c.winfo_manager()] == wanted:
             return
@@ -455,6 +486,14 @@ class App:
         for ev in ("<KeyRelease>", "<FocusOut>"):
             e.bind(ev, lambda _e: self._fantasy_changed())
         return e
+
+    def _meetings_changed(self):
+        url = self.cal_url.get().strip()
+        self.cal_url.configure(show="•" if url else "")     # it's a private link: keep it hidden
+        self.settings.calendar_url = url
+        self.settings.meeting_window = int(self.m_window.get().split()[0])
+        self.settings.meeting_alert = self.REMIND[self.m_alert.get()]
+        self._schedule_save()
 
     def _fantasy_changed(self):
         self.settings.sleeper_user = self.sleeper_user.get().strip()
@@ -577,6 +616,7 @@ class App:
     def _opts_changed(self):
         self.settings.loop = self.loop.get()
         self.settings.clock_24h = self.h24.get()
+        self.settings.keep_awake = self.awake.get()
         self._schedule_save()
 
     def _schedule_save(self):
@@ -597,7 +637,9 @@ class App:
                       "clock_24h": s.clock_24h, "opacity": self.opacity.get(),
                       "cpu_meter": s.cpu_meter, "gpu_meter": s.gpu_meter,
                       "favorites": s.favorites, "favorites_only": s.favorites_only, "alerts": s.alerts,
-                      "sleeper_user": s.sleeper_user, "sleeper_league": s.sleeper_league}
+                      "sleeper_user": s.sleeper_user, "sleeper_league": s.sleeper_league,
+                      "keep_awake": s.keep_awake, "calendar_url": s.calendar_url,
+                      "meeting_window": s.meeting_window, "meeting_alert": s.meeting_alert}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 
@@ -615,6 +657,7 @@ class App:
         self._fill_counts()
         self.wcount.set(str(d.weather_count))
         self.h24.set(False)
+        self.awake.set(d.keep_awake)
         self.fav_only.set(d.favorites_only)
         self.alerts_on.set(d.alerts)
         self._favorites_changed()          # favorite teams themselves are kept
@@ -704,28 +747,49 @@ class App:
             self._restarting = True
             self.stop_event.set()
 
+    RECONNECT_S = 10
+
     def _worker(self):
-        panel = None
+        """Run the ticker; if the display drops out (e.g. the PC slept), reconnect and carry on."""
+        stop = self.stop_event
+        if self.settings.keep_awake:
+            power.keep_awake(True)
+        lost = False
         try:
             if nexlinq.running():            # it fights over the panel; skipped if it isn't installed/open
                 self.log(nexlinq.quit_nexlinq())
             from matrix.transport import Matrix
-            panel = Matrix()
-            self.log("Ticker started.")
-            self.ticker = ScrollTicker(panel, self.settings, log=self.log, stop_event=self.stop_event,
-                                       counter=self.counter, timer=self.timer)
-            self.ticker.run()
-            self.log("Ticker stopped." if self.stop_event.is_set() else "Ticker finished.")
-        except Exception as e:
-            self.log(f"Error: {e}")
-        finally:
-            self.ticker = None
-            if panel:
+            while not stop.is_set():
+                panel = None
                 try:
+                    panel = Matrix()
+                    self.log("Display reconnected." if lost else "Ticker started.")
+                    lost = False
+                    self.ticker = ScrollTicker(panel, self.settings, log=self.log, stop_event=stop,
+                                               counter=self.counter, timer=self.timer)
+                    self.ticker.run()
+                    self.log("Ticker stopped." if stop.is_set() else "Ticker finished.")
                     if not self._restarting:          # about to start again: skip the flash of the old layout
                         self.log(restore_layout(panel))
+                    break
+                except Exception as e:
+                    if stop.is_set():
+                        break
+                    if not lost:
+                        self.log(f"Lost the display ({e}). Retrying every {self.RECONNECT_S} s…")
+                    lost = True
                 finally:
-                    panel.close()
+                    self.ticker = None
+                    if panel:
+                        try:
+                            panel.close()
+                        except Exception:
+                            pass
+                end = time.time() + self.RECONNECT_S
+                while time.time() < end and not stop.is_set():
+                    time.sleep(0.2)
+        finally:
+            power.keep_awake(False)
 
     def _stop_and_wait(self):
         if self.thread and self.thread.is_alive():

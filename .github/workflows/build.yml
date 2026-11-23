@@ -44,6 +44,9 @@ jobs:
           --collect-submodules winrt
           --collect-data tzdata
           --collect-data customtkinter
+          --collect-all icalendar
+          --collect-submodules recurring_ical_events
+          --collect-submodules x_wr_timezone
           gui.py
 
       - name: Install Inno Setup

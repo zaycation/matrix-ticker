@@ -11,16 +11,16 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from . import alerts, favorites, render, scores, screens, sleeper, style, weather
+from . import alerts, favorites, meetings, render, scores, screens, sleeper, style, weather
 from .font import ICON_CHAR
 
 from .paths import RESTORE_FILE
 MIN_GAP = 0.15          # the panel needs > 0.05 s after each frame; 0.15 s is proven
 STATE_ORDER = {"in": 0, "post": 1, "pre": 2}
-WEATHER, NOWPLAYING, FANTASY = "WEATHER", "NOW PLAYING", "FANTASY"
+WEATHER, NOWPLAYING, FANTASY, MEETINGS = "WEATHER", "NOW PLAYING", "FANTASY", "MEETINGS"
 DASHBOARD, CALENDAR, COUNTER, TIMER = "DASHBOARD", "CALENDAR", "COUNTER", "TIMER"
 SCREENS = [DASHBOARD, CALENDAR, COUNTER, TIMER]            # static screens, shown for screen_seconds
-ITEMS = list(scores.ALL) + [FANTASY, WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
+ITEMS = list(scores.ALL) + [FANTASY, MEETINGS, WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
 FLASH_SECONDS = 3.0
 
 
@@ -41,6 +41,10 @@ class Settings:
     alerts: bool = True            # flash big moments for favorite teams (and fantasy big plays)
     sleeper_user: str = ""         # Sleeper username for FANTASY
     sleeper_league: str = ""       # only leagues whose name contains this ("" = all your leagues)
+    calendar_url: str = ""         # private iCal link for MEETINGS (see matrix/meetings.py)
+    meeting_window: int = 90       # show meetings starting within this many minutes
+    meeting_alert: int = 5         # reminder this many minutes before (0 = off)
+    keep_awake: bool = True        # hold off automatic Windows sleep while running (monitors may still turn off)
     cpu_meter: str = "load"        # dashboard top meter: load, ram
     gpu_meter: str = "temp"        # dashboard bottom meter: temp, load, vram, power, fan
     loop: bool = True
@@ -218,6 +222,23 @@ class ScrollTicker:
             cols = render.strip(segs)
             self.log("Now playing" + (f", {len(cols)} px" if self.s.verbose else ""))
             return cols
+        if item == MEETINGS:
+            if not self.s.calendar_url.strip():
+                if self.s.verbose:
+                    self.log("Meetings: no calendar link set, skipping.")
+                return None
+            try:
+                segs = meetings.segments(self.s.calendar_url, self.s.meeting_window, self.s.clock_24h)
+            except Exception as e:
+                self.log(f"Meetings: couldn't read the calendar ({e})")
+                return None
+            if not segs:
+                if self.s.verbose:
+                    self.log(f"Meetings: nothing in the next {self.s.meeting_window} min")
+                return None
+            cols = render.strip(segs)
+            self.log("Meetings" + (f", {len(cols)} px" if self.s.verbose else ""))
+            return cols
         if item == FANTASY:
             if not self.s.sleeper_user.strip():
                 if self.s.verbose:
@@ -268,6 +289,7 @@ class ScrollTicker:
     def run(self):
         alerts.Watcher(self.s, self.push_alert, self.stop, self.games_source, self.log).start()
         sleeper.Watcher(self.s, self.push_alert, self.stop, self.log).start()
+        meetings.Watcher(self.s, self.push_alert, self.stop, self.log).start()
         while not self.stop.is_set():
             shown_any = False
             for item in list(self.s.leagues):

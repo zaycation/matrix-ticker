@@ -62,6 +62,15 @@ Turn on **Only my teams** to hide every other game. **Test alert** shows a sampl
 scrolls by (green when you're winning), and with alerts on, a starter's big play flashes up, like
 `J. ALLEN +6.4`. Type part of a league name to show just that league.
 
+**Meetings:** tick **MEETINGS** and paste your calendar's private iCal link (Google Calendar:
+Settings → your calendar → *Secret address in iCal format*). Meetings show up only when they start
+within the next 90 minutes (you can change that), and a reminder flashes 5 minutes before.
+All-day events, cancelled meetings and ones you declined are skipped.
+
+**Keep PC awake** (on by default): while the ticker runs, Windows won't go to sleep on its own,
+though your monitors can still turn off. If you put the PC to sleep yourself, the display goes dark
+with it and the ticker picks back up when the PC wakes.
+
 **Updates:** the app checks for a new version once a day and shows a **Download** button when one is out.
 
 **Timer:** tick **TIMER**, name it (`FOCUS`, `LAUNDRY`), pick the minutes and press **Start**, or use
