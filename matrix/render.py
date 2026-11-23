@@ -6,7 +6,8 @@ The panel's pixel order is rows of 90, left to right, starting top-left.
 from . import font
 
 W, H = 90, 10
-TOP = 1                      # 7-px glyphs drawn on rows 1-7
+TOP = 1                      # letters on rows 1-8 (comma tails on row 9)
+ICON_TOP = TOP + 1           # 7-row icons on rows 2-8, bottoms level with the letters
 BLACK = (0, 0, 0)
 
 
@@ -20,7 +21,7 @@ def strip(segments):
                     col = [BLACK] * H
                     for y, c in enumerate(icol):
                         if c:
-                            col[TOP + y] = c
+                            col[ICON_TOP + y] = c
                     cols.append(col)
                 cols.extend([[BLACK] * H for _ in range(font.GAP)])
                 continue

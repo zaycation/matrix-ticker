@@ -2,8 +2,8 @@
 
 Three text sizes:
 - small: 3x5 font (two lines fit on the panel)
-- normal: the 5x7 ticker font
-- big: 10-px-tall digits/clock (the 5x7 font stretched vertically)
+- normal: the panel font (5x8, matching Phanteks' own)
+- big: the panel font at a chosen height (clock, counter, timer)
 """
 from . import font
 
@@ -80,20 +80,22 @@ class Canvas:
         return x - 1
 
     def normal(self, text, x, y, rgb):
-        """5x7 ticker font at (x, y) = top-left. Returns the x after the text."""
+        """Panel font (5x8, see font.py) at (x, y) = top-left. Returns the x after the text."""
         for ch in text:
-            cols = font.icon_columns(ch) if ch in font.ICONS else font.glyph_columns(ch)
+            icon = ch in font.ICONS
+            cols = font.icon_columns(ch) if icon else font.glyph_columns(ch)
+            dy0 = 1 if icon else 0          # 7-row icons sit one row down, level with the letters' bottoms
             for dx, col in enumerate(cols):
                 for dy, on in enumerate(col):
                     if on:
-                        self.set(x + dx, y + dy, on if isinstance(on, tuple) else rgb)
+                        self.set(x + dx, y + dy0 + dy, on if isinstance(on, tuple) else rgb)
             x += len(cols) + font.GAP
         return x - font.GAP
 
     def big(self, text, x, rgb, top=1, height=8):
-        """Tall text (the 5x7 font stretched to `height` rows starting at `top`).
-        Default: rows 1-8, leaving a row of margin above and below. Returns end x."""
-        rows = [int(y * 7 / height) for y in range(height)]
+        """Tall text: the panel font's 8 letter rows, stretched or squeezed to `height` rows
+        starting at `top` (at the default height of 8 it's the font as-is). Returns end x."""
+        rows = [int(y * 8 / height) for y in range(height)]
         for ch in text:
             cols = font.glyph_columns(ch)
             for dx, col in enumerate(cols):
@@ -116,4 +118,4 @@ def normal_width(text):
 
 
 def big_width(text):
-    return font.text_width(text)       # same columns as the 5x7 font, just taller
+    return font.text_width(text)       # same columns as the normal font
