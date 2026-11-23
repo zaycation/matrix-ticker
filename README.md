@@ -68,6 +68,23 @@ red, or **DOWN**). Change it under Options → Dashboard corner.
 scrolls by (green when you're winning), and with alerts on, a starter's big play flashes up, like
 `J. ALLEN +6.4`. Type part of a league name to show just that league.
 
+**Messages from a phone:** tick **MESSAGES**. The app makes a private link (Messages section →
+**Copy**). Anything sent to that link pops up on the display with a heart and the sender's name,
+then stays in the cycle until midnight (or **Clear**). Emoji are dropped (the LEDs can't draw them).
+Anyone with the link can send, so only share it with people you want; **New link** replaces it.
+
+Set it up on an iPhone with the Shortcuts app (2 minutes):
+1. Shortcuts → **+** (new shortcut). Add the action **Ask for Input**: type *Text*, prompt
+   *Message for the PC*.
+2. Add **Get Contents of URL**. URL: paste the link. Tap the arrow to show more:
+   **Method** *POST*; **Headers** → add *Title* = her name (shown on the display);
+   **Request Body** *File* → choose the *Provided Input* from step 1.
+3. Optional: add **Show Notification** with *Sent!*.
+4. Rename it (e.g. *Message Zay's PC*), then **Share → Add to Home Screen**.
+   Siri works too: "Hey Siri, Message Zay's PC".
+
+No iPhone? Opening the link in any browser shows a page with a box to send from.
+
 **Meetings:** tick **MEETINGS** and paste your calendar's private iCal link (Google Calendar:
 Settings → your calendar → *Secret address in iCal format*). Meetings show up only when they start
 within the next 90 minutes (you can change that), and a reminder flashes 5 minutes before.

@@ -19,10 +19,10 @@ from tkinter import filedialog
 
 import customtkinter as ctk
 
-from matrix import autostart, nexlinq, power, updates
+from matrix import autostart, messages, nexlinq, power, updates
 from matrix.counter import Counter
 from matrix.timer import Timer, clock
-from matrix.ticker import COUNTER, FANTASY, ITEMS, MEETINGS, TIMER, ScrollTicker, Settings, restore_layout
+from matrix.ticker import COUNTER, FANTASY, ITEMS, MEETINGS, MESSAGES, TIMER, ScrollTicker, Settings, restore_layout
 from matrix.version import __version__
 
 try:
@@ -97,7 +97,7 @@ class App:
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
                     "weather_count", "screen_seconds", "clock_24h", "cpu_meter", "gpu_meter",
                     "favorites", "favorites_only", "alerts", "sleeper_user", "sleeper_league", "keep_awake", "calendar_url", "meeting_window",
-                    "meeting_alert", "quake_alerts", "quake_radius", "dashboard_corner"):
+                    "meeting_alert", "message_topic", "quake_alerts", "quake_radius", "dashboard_corner"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
@@ -219,6 +219,31 @@ class App:
         self._dropdown(qrow, self.quake_radius, ["25 mi", "50 mi", "75 mi", "100 mi"], 84,
                        lambda _v: self._location_changed()).pack(side="left", padx=(8, 0))
         ctk.CTkLabel(qrow, text="(M3.5+)", text_color=MUTED, font=font(11)).pack(side="left", padx=(6, 0))
+
+        # messages (only shown when MESSAGES is ticked)
+        if not self.settings.message_topic:
+            self.settings.message_topic = messages.new_topic()      # a private code, made once
+        self.messages_box = box_n = self._card(left, "Messages (from a phone)", pack=False)
+        self.topic_link = ctk.CTkEntry(box_n, width=300, height=30, corner_radius=8, fg_color=FIELD, border_width=0,
+                                       text_color=FG, font=font(12))
+        self._show_topic()
+        self.topic_link.grid(row=1, column=0, columnspan=2, sticky="w")
+        tl = ctk.CTkFrame(box_n, fg_color="transparent")
+        tl.grid(row=1, column=2, columnspan=2, sticky="e")
+        self._button(tl, "Copy", self._copy_topic, width=54, height=30).pack(side="left", padx=(6, 0))
+        self._button(tl, "New link", self._new_topic, width=74, height=30).pack(side="left", padx=(6, 0))
+        self.msg_text = ctk.CTkEntry(box_n, placeholder_text="Send a test message", width=300, height=30,
+                                     corner_radius=8, fg_color=FIELD, border_width=0, text_color=FG,
+                                     placeholder_text_color=MUTED, font=font())
+        self.msg_text.bind("<Return>", lambda e: self._send_message())
+        self.msg_text.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ml = ctk.CTkFrame(box_n, fg_color="transparent")
+        ml.grid(row=2, column=2, columnspan=2, sticky="e", pady=(6, 0))
+        self._button(ml, "Send", self._send_message, width=54, height=30).pack(side="left", padx=(6, 0))
+        self._button(ml, "Clear", self._clear_message, width=74, height=30).pack(side="left", padx=(6, 0))
+        ctk.CTkLabel(box_n, text="Her iPhone Shortcut sends to this link (setup steps: README → Messages).",
+                     text_color=MUTED, font=font(11)).grid(row=3, column=0, columnspan=4, sticky="w", pady=(4, 0))
+        box_n.columnconfigure(1, weight=1)
 
         # timer (only shown when TIMER is ticked)
         self.left = left
@@ -477,13 +502,14 @@ class App:
         self._location_changed()
 
     def _show_counter_box(self):
-        """Fantasy, counter and timer settings only show when their item is ticked."""
-        t = self.timer_box.card
-        if self.league_vars[TIMER].get():
-            if not t.winfo_manager():
-                t.pack(fill="x", pady=(8, 0))
-        else:
-            t.pack_forget()
+        """Messages, timer, meetings, fantasy and counter settings only show when their item is ticked."""
+        lefts = [(self.messages_box.card, MESSAGES), (self.timer_box.card, TIMER)]
+        wanted = [c for c, item in lefts if self.league_vars[item].get()]
+        if [c for c, _ in lefts if c.winfo_manager()] != wanted:
+            for c, _ in lefts:
+                c.pack_forget()
+            for c in wanted:
+                c.pack(fill="x", pady=(8, 0))
         cards = [(self.meetings_box.card, MEETINGS), (self.fantasy_box.card, FANTASY),
                  (self.counter_box.card, COUNTER)]
         wanted = [c for c, item in cards if self.league_vars[item].get()]
@@ -593,6 +619,43 @@ class App:
         self.counter.label = self.c_label.get().strip() or "COUNT"
         self.counter.save()
 
+    def _show_topic(self):
+        self.topic_link.configure(state="normal")
+        self.topic_link.delete(0, "end")
+        self.topic_link.insert(0, messages.url(self.settings.message_topic))
+        self.topic_link.configure(state="readonly")
+
+    def _copy_topic(self):
+        self.root.clipboard_clear()
+        self.root.clipboard_append(messages.url(self.settings.message_topic))
+        self.log("Message link copied.")
+
+    def _new_topic(self):
+        """A fresh private link (the old one stops working; the Shortcut needs the new one)."""
+        self.settings.message_topic = messages.new_topic()
+        self._show_topic()
+        self._schedule_save()
+        self.log("New message link made. Update the Shortcut on her phone with it.")
+
+    def _send_message(self):
+        text = self.msg_text.get().strip()
+        if not text:
+            return
+        self.msg_text.delete(0, "end")
+        topic = self.settings.message_topic
+
+        def work():
+            try:
+                messages.send(topic, text, "Test")
+                self.log("Sent. It shows on the panel within ~10 s (MESSAGES ticked, ticker running).")
+            except Exception as e:
+                self.log(f"Couldn't send: {e}")
+        threading.Thread(target=work, daemon=True).start()
+
+    def _clear_message(self):
+        messages.clear()
+        self.log("Message cleared from the panel.")
+
     def _set_hotkey(self):
         err = self.counter.listen(self.c_hotkey.get().strip())
         self.log(err or f"Counter shortcut: {self.counter.hotkey}")
@@ -671,6 +734,7 @@ class App:
                       "sleeper_user": s.sleeper_user, "sleeper_league": s.sleeper_league,
                       "keep_awake": s.keep_awake, "calendar_url": s.calendar_url,
                       "meeting_window": s.meeting_window, "meeting_alert": s.meeting_alert,
+                      "message_topic": s.message_topic,
                       "quake_alerts": s.quake_alerts, "quake_radius": s.quake_radius,
                       "dashboard_corner": s.dashboard_corner}
         with open(CONFIG_FILE, "w") as f:

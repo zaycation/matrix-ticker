@@ -20,3 +20,4 @@ dist/
 *.spec
 packaging/icon.ico
 sleeper_players.json
+message.json
