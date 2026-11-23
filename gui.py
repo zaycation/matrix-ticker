@@ -85,7 +85,7 @@ class App:
     CORNERS = {"Date + ping": "both", "Date": "date", "Ping": "ping"}
     REMIND = {"Off": 0, "2 min before": 2, "5 min before": 5, "10 min before": 10, "15 min before": 15}
     REMIND_REV = {v: k for k, v in REMIND.items()}
-    GPU_METERS = {"Temperature": "temp", "Load": "load", "VRAM": "vram", "Power": "power", "Fan": "fan"}
+    GPU_METERS = {"Load": "load", "Temperature": "temp", "VRAM": "vram", "Power": "power", "Fan": "fan"}
 
     def __init__(self, root):
         self.root = root
@@ -762,7 +762,7 @@ class App:
         self.quake_radius.set(f"{d.quake_radius} mi")
         self.corner.set("Date + ping")
         self.cpu_meter.set("Load")
-        self.gpu_meter.set("Temperature")
+        self.gpu_meter.set("Load")
         self._meters_changed()
         self.opacity.set(DEFAULT_OPACITY)
         self._opacity_changed()

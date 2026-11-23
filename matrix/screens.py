@@ -81,13 +81,13 @@ def _date_corner(c, now):
     c.normal(day, x + PAIR_GAP, 1, CYAN)
 
 
-def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="temp", corner="both"):
+def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="load", corner="both"):
     """CPU / GPU meters, big clock, and a corner with the date, ping, or both taking turns.
     Meters: see system.CPU_METERS / GPU_METERS (GPU ones need an NVIDIA card)."""
     now = now or dt.datetime.now()
     c = Canvas()
     top_label, top = system.CPU_METERS.get(cpu_meter, system.CPU_METERS["load"])
-    bottom_label, bottom = system.GPU_METERS.get(gpu_meter, system.GPU_METERS["temp"])
+    bottom_label, bottom = system.GPU_METERS.get(gpu_meter, system.GPU_METERS["load"])
     widget_end = _widget(c, 1, top_label, top() or 0)  # rows 1-4
     _widget(c, 6, bottom_label, bottom() or 0)        # rows 6-9 (row 5 between)
     show_ping = corner == "ping" or (corner == "both" and int(time.time() // CORNER_SWAP_S) % 2 == 1)

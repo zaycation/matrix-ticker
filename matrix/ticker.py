@@ -51,7 +51,7 @@ class Settings:
     keep_awake: bool = True        # hold off automatic Windows sleep while running (monitors may still turn off)
     cpu_meter: str = "load"        # dashboard top meter: load, ram
     dashboard_corner: str = "both" # dashboard top-right: "date", "ping", or "both" (taking turns)
-    gpu_meter: str = "temp"        # dashboard bottom meter: temp, load, vram, power, fan
+    gpu_meter: str = "load"        # dashboard bottom meter: load, temp, vram, power, fan
     loop: bool = True
     verbose: bool = False
     step: int = 4                  # pixels moved per frame
