@@ -13,11 +13,21 @@ WEEKDAYS = "MON TUE WED THU FRI SAT SUN".split()
 WEEK_DIM = (70, 70, 70)
 
 
+GREEN, YELLOW, METER_RED = (0, 220, 60), (255, 200, 0), (255, 30, 30)
+
+
+def _gradient(t):
+    """Green -> yellow -> red across the bar, like NexLinq's default meter gradient."""
+    a, b, t = (GREEN, YELLOW, t * 2) if t < 0.5 else (YELLOW, METER_RED, (t - 0.5) * 2)
+    return tuple(round(a[k] + (b[k] - a[k]) * t) for k in range(3))
+
+
 def _meter(c, x, y, w, h, frac):
-    """NexLinq-style bar: lit columns fade teal -> blue, the rest stay dim."""
+    """NexLinq-style bar: each lit column takes its color from its place along the bar,
+    so a low reading is all green and a high one runs through yellow into red."""
     lit = round(max(0.0, min(1.0, frac)) * w)
     for i in range(w):
-        color = METER[min(len(METER) - 1, i * len(METER) // w)] if i < lit else DIM
+        color = _gradient(i / max(1, w - 1)) if i < lit else DIM
         for yy in range(y, y + h):
             c.set(x + i, yy, color)
 
