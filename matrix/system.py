@@ -4,6 +4,7 @@
 - GPU temperature / load / VRAM / power / fan: NVIDIA's NVML (pip package nvidia-ml-py), NVIDIA cards only
 CPU temperature and fan speeds need a hardware driver on Windows; not supported yet.
 """
+import time
 try:
     import psutil
     psutil.cpu_percent(interval=None)        # first call primes the counter
@@ -25,8 +26,35 @@ def _gpu():
     return _nvml or None
 
 
+_cpu_last = (0.0, None)          # (time, per-core percents)
+
+
+def _cpu_sample():
+    """Per-core load since the previous sample. psutil measures "since the last call", so a
+    second call right after the first would cover almost no time and read ~0: samples less
+    than half a second apart reuse the last one."""
+    global _cpu_last
+    now = time.monotonic()
+    if _cpu_last[1] is None or now - _cpu_last[0] >= 0.5:
+        _cpu_last = (now, psutil.cpu_percent(interval=None, percpu=True))
+    return _cpu_last[1]
+
+
 def cpu_load():
-    return psutil.cpu_percent(interval=None) if psutil else None
+    """Total CPU load, percent (the number Task Manager shows)."""
+    if not psutil:
+        return None
+    cores = _cpu_sample()
+    return sum(cores) / len(cores) if cores else None
+
+
+def cpu_peak():
+    """Load of the busiest core, percent. Games often max out one or two cores while the
+    total stays low."""
+    if not psutil:
+        return None
+    cores = _cpu_sample()
+    return max(cores) if cores else None
 
 
 def ram_used():
@@ -83,11 +111,16 @@ def gpu_fan():
     return _nv(lambda nv, h: nv.nvmlDeviceGetFanSpeed(h))
 
 
+def _frac(pct):
+    return None if pct is None else pct / 100
+
+
 TEMP_LO, TEMP_HI = 30, 90       # temperature meter scale, Celsius
 
 # meter choice -> (label on the panel, function giving 0..1 or None)
 CPU_METERS = {
-    "load": ("CPU", lambda: None if cpu_load() is None else cpu_load() / 100),
+    "load": ("CPU", lambda: _frac(cpu_load())),
+    "peak": ("CPU", lambda: _frac(cpu_peak())),
     "ram": ("RAM", lambda: None if ram_used() is None else ram_used() / 100),
 }
 GPU_METERS = {

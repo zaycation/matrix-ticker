@@ -81,7 +81,7 @@ class App:
     WMODES = {"days": "daily", "hours": "hourly"}
     WMODES_REV = {v: k for k, v in WMODES.items()}
     COUNTS = {"daily": range(1, 15), "hourly": range(1, 25)}    # Open-Meteo gives 16 days ahead
-    CPU_METERS = {"Load": "load", "RAM": "ram"}
+    CPU_METERS = {"Load": "load", "Busiest core": "peak", "RAM": "ram"}
     REMIND = {"Off": 0, "2 min before": 2, "5 min before": 5, "10 min before": 10, "15 min before": 15}
     REMIND_REV = {v: k for k, v in REMIND.items()}
     GPU_METERS = {"Temperature": "temp", "Load": "load", "VRAM": "vram", "Power": "power", "Fan": "fan"}
@@ -266,7 +266,7 @@ class App:
         self.cpu_meter = tk.StringVar(value=rev(self.CPU_METERS, self.settings.cpu_meter))
         self.gpu_meter = tk.StringVar(value=rev(self.GPU_METERS, self.settings.gpu_meter))
         ctk.CTkLabel(meters, text="CPU", text_color=MUTED, font=font(12)).pack(side="left", padx=(8, 4))
-        self._dropdown(meters, self.cpu_meter, list(self.CPU_METERS), 84, self._meters_changed).pack(side="left")
+        self._dropdown(meters, self.cpu_meter, list(self.CPU_METERS), 128, self._meters_changed).pack(side="left")
         ctk.CTkLabel(meters, text="GPU", text_color=MUTED, font=font(12)).pack(side="left", padx=(12, 4))
         self._dropdown(meters, self.gpu_meter, list(self.GPU_METERS), 128, self._meters_changed).pack(side="left")
 

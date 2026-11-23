@@ -18,7 +18,7 @@ Only games happening today show up. Your **favorite teams** go first with a gold
 ![5-day forecast](docs/images/weather-days.png)
 ![Next 5 hours](docs/images/weather-hours.png)
 
-**PC dashboard:** CPU and GPU meters (pick what they show: load, temperature, RAM, VRAM, power, fan), a big clock and the date.
+**PC dashboard:** CPU and GPU meters (pick what they show: load, busiest core, temperature, RAM, VRAM, power, fan), a big clock and the date.
 
 ![Dashboard](docs/images/dashboard.png)
 

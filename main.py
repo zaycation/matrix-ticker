@@ -260,7 +260,7 @@ def main():
     ap.add_argument("--favorites", default="", help='favorite teams, e.g. "Bears, Sparks" (listed first, starred)')
     ap.add_argument("--only-favorites", action="store_true", help="show only games with a favorite team")
     ap.add_argument("--no-alerts", action="store_true", help="no big-moment alerts for favorite teams")
-    ap.add_argument("--cpu-meter", default=Settings.cpu_meter, choices=["load", "ram"],
+    ap.add_argument("--cpu-meter", default=Settings.cpu_meter, choices=["load", "peak", "ram"],
                     help="dashboard top meter")
     ap.add_argument("--gpu-meter", default=Settings.gpu_meter, choices=["temp", "load", "vram", "power", "fan"],
                     help="dashboard bottom meter (NVIDIA)")

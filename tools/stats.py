@@ -19,7 +19,7 @@ def main():
         print("psutil isn't installed, so CPU load is unavailable: pip install psutil")
     if system._gpu() is None:
         print("NVIDIA stats unavailable (no NVIDIA card, driver, or nvidia-ml-py): pip install nvidia-ml-py")
-    names = [("CPU load", system.cpu_load, "%"), ("RAM", system.ram_used, "%"), ("GPU temp", system.gpu_temp, " C"),
+    names = [("CPU load", system.cpu_load, "%"), ("Busy core", system.cpu_peak, "%"), ("RAM", system.ram_used, "%"), ("GPU temp", system.gpu_temp, " C"),
              ("GPU load", system.gpu_load, "%"), ("VRAM", system.gpu_vram, "%"),
              ("Power", system.gpu_power, "%"), ("Fan", system.gpu_fan, "%")]
     print("  ".join(f"{n:>9}" for n, _, _ in names))
