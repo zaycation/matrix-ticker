@@ -1,7 +1,8 @@
 """Static full-screen widgets (dashboard, calendar, counter) and the now-playing line."""
 import datetime as dt
+import time
 
-from . import font, media, style, system
+from . import network, font, media, style, system
 from .canvas import Canvas, W, big_width, normal_width, small_width
 
 WHITE, GRAY, DIM = (255, 255, 255), (110, 110, 110), (28, 30, 38)
@@ -25,8 +26,36 @@ def _clock_text(now, h24):
     return now.strftime("%H:%M") if h24 else f"{now.hour % 12 or 12}:{now.minute:02d}"
 
 
-def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="temp"):
-    """CPU / GPU meters, big clock, date: a remake of NexLinq's widget.
+CORNER_SWAP_S = 4                      # "both": switch between date and ping this often
+CORNER_W = 32                          # right-hand corner width, so the clock never shifts
+
+
+def _ping_corner(c):
+    """'14MS' (green / gold / red by quality) or 'DOWN' in red. False if no reading yet."""
+    ms = network.ping()
+    if ms is None and not network.started():
+        return False
+    if ms is None:
+        text, color = "DOWN", RED
+    else:
+        text = f"{ms:.0f}"
+        color = (37, 200, 100) if ms < network.GOOD_MS else GOLD if ms < network.OK_MS else RED
+    unit = "" if ms is None else "MS"
+    w = normal_width(text) + (1 + normal_width(unit) if unit else 0)
+    x = c.normal(text, W - w, 1, color)
+    if unit:
+        c.normal(unit, x + 2, 1, WHITE)
+    return True
+
+
+def _date_corner(c, now):
+    month, day = MONTHS[now.month - 1], str(now.day)
+    x = c.normal(month, W - (normal_width(month) + 1 + normal_width(day)), 1, WHITE)
+    c.normal(day, x + 2, 1, CYAN)
+
+
+def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="temp", corner="both"):
+    """CPU / GPU meters, big clock, and a corner with the date, ping, or both taking turns.
     Meters: see system.CPU_METERS / GPU_METERS (GPU ones need an NVIDIA card)."""
     now = now or dt.datetime.now()
     c = Canvas()
@@ -36,13 +65,11 @@ def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="temp"):
     c.tiny(bottom_label, 0, 6, WHITE)                   # rows 6-9 (2-row gap between)
     _meter(c, 12, 0, 15, 4, top() or 0)
     _meter(c, 12, 6, 15, 4, bottom() or 0)
-    month, day = MONTHS[now.month - 1], str(now.day)
-    date_w = normal_width(month) + 1 + normal_width(day)
-    date_x = W - date_w
-    x = c.normal(month, date_x, 1, WHITE)
-    c.normal(day, x + 2, 1, CYAN)
+    show_ping = corner == "ping" or (corner == "both" and int(time.time() // CORNER_SWAP_S) % 2 == 1)
+    if not (show_ping and _ping_corner(c)):
+        _date_corner(c, now)
     clock = _clock_text(now, h24)
-    left, right = 28, date_x - 2                       # center the clock in the gap
+    left, right = 28, W - CORNER_W - 2                  # center the clock in the gap
     c.big(clock, left + max(0, (right - left - big_width(clock)) // 2), WHITE)
     return c.to_bytes()
 

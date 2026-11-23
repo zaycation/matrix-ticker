@@ -11,16 +11,16 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from . import alerts, favorites, meetings, render, scores, screens, sleeper, style, weather
+from . import alerts, favorites, meetings, news, quakes, render, scores, screens, sleeper, style, weather
 from .font import ICON_CHAR
 
 from .paths import RESTORE_FILE
 MIN_GAP = 0.15          # the panel needs > 0.05 s after each frame; 0.15 s is proven
 STATE_ORDER = {"in": 0, "post": 1, "pre": 2}
-WEATHER, NOWPLAYING, FANTASY, MEETINGS = "WEATHER", "NOW PLAYING", "FANTASY", "MEETINGS"
+WEATHER, NOWPLAYING, FANTASY, MEETINGS, NEWS = "WEATHER", "NOW PLAYING", "FANTASY", "MEETINGS", "NEWS"
 DASHBOARD, CALENDAR, COUNTER, TIMER = "DASHBOARD", "CALENDAR", "COUNTER", "TIMER"
 SCREENS = [DASHBOARD, CALENDAR, COUNTER, TIMER]            # static screens, shown for screen_seconds
-ITEMS = list(scores.ALL) + [FANTASY, MEETINGS, WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
+ITEMS = list(scores.ALL) + [NEWS, FANTASY, MEETINGS, WEATHER, NOWPLAYING] + SCREENS   # everything the ticker can cycle
 FLASH_SECONDS = 3.0
 
 
@@ -44,8 +44,12 @@ class Settings:
     calendar_url: str = ""         # private iCal link for MEETINGS (see matrix/meetings.py)
     meeting_window: int = 90       # show meetings starting within this many minutes
     meeting_alert: int = 5         # reminder this many minutes before (0 = off)
+    news_alerts: str = "all"       # breaking-news cut-ins: "all", "mine" (favorite teams), "off"
+    quake_alerts: bool = True      # earthquake cut-ins near the weather location
+    quake_radius: int = 50         # miles
     keep_awake: bool = True        # hold off automatic Windows sleep while running (monitors may still turn off)
     cpu_meter: str = "load"        # dashboard top meter: load, ram
+    dashboard_corner: str = "both" # dashboard top-right: "date", "ping", or "both" (taking turns)
     gpu_meter: str = "temp"        # dashboard bottom meter: temp, load, vram, power, fan
     loop: bool = True
     verbose: bool = False
@@ -136,6 +140,9 @@ class ScrollTicker:
 
     def _show_alert(self, alert):
         self.log("Alert: " + alert.text())
+        if alert.scroll:
+            self._scroll(render.strip(alert.scroll), interruptible=False)
+            return
         word, score = alerts.frames(alert)
         for i in range(6):                     # event, score, event, ... about 5 seconds
             if self.stop.is_set():
@@ -209,7 +216,8 @@ class ScrollTicker:
             if self.stop.is_set():
                 break
             if item == DASHBOARD:
-                buf = screens.dashboard(h24=self.s.clock_24h, cpu_meter=self.s.cpu_meter, gpu_meter=self.s.gpu_meter)
+                buf = screens.dashboard(h24=self.s.clock_24h, cpu_meter=self.s.cpu_meter, gpu_meter=self.s.gpu_meter,
+                                        corner=self.s.dashboard_corner)
             elif item == CALENDAR:
                 buf = screens.calendar()
             else:
@@ -229,6 +237,19 @@ class ScrollTicker:
                 return None
             cols = render.strip(segs)
             self.log("Now playing" + (f", {len(cols)} px" if self.s.verbose else ""))
+            return cols
+        if item == NEWS:
+            try:
+                segs = news.segments([x for x in self.s.leagues if x in news.PATHS], favorites.parse(self.s.favorites))
+            except Exception as e:
+                self.log(f"News: {e}")
+                return None
+            if not segs:
+                if self.s.verbose:
+                    self.log("News: no recent headlines (tick a sport to get its news)")
+                return None
+            cols = render.strip(segs)
+            self.log("News" + (f", {len(cols)} px" if self.s.verbose else ""))
             return cols
         if item == MEETINGS:
             if not self.s.calendar_url.strip():
@@ -294,7 +315,32 @@ class ScrollTicker:
                  + (f", {len(cols)} px" if self.s.verbose else ""))
         return cols
 
+    def _scroll(self, cols, interruptible=True):
+        """Scroll a strip across once. interruptible: alerts and the counter may cut in
+        (not while showing an alert itself). Returns False if stopped."""
+        offset = -render.W
+        while offset <= len(cols):
+            if self.stop.is_set():
+                return False
+            if interruptible:
+                self._maybe_flash()
+            upload = self._frame(render.frame(cols, offset))
+            # If the speed asks for more than step px per achievable frame, move further per frame.
+            speed = max(1.0, self.s.speed)
+            step = max(self.s.step, math.ceil(speed * (upload + MIN_GAP)))
+            pause = max(MIN_GAP, step / speed - upload)
+            if interruptible:
+                self._wait(pause)
+            else:
+                end = time.perf_counter() + pause
+                while time.perf_counter() < end and not self.stop.is_set():
+                    time.sleep(0.02)
+            offset += step
+        return True
+
     def run(self):
+        news.Watcher(self.s, self.push_alert, self.stop, self.log).start()
+        quakes.Watcher(self.s, self.push_alert, self.stop, self.log).start()
         alerts.Watcher(self.s, self.push_alert, self.stop, self.games_source, self.log).start()
         sleeper.Watcher(self.s, self.push_alert, self.stop, self.log).start()
         meetings.Watcher(self.s, self.push_alert, self.stop, self.log).start()
@@ -310,17 +356,8 @@ class ScrollTicker:
                 if cols is None:
                     continue
                 shown_any = True
-                offset = -render.W
-                while offset <= len(cols):
-                    if self.stop.is_set():
-                        return
-                    self._maybe_flash()
-                    upload = self._frame(render.frame(cols, offset))
-                    # If the speed asks for more than step px per achievable frame, move further per frame.
-                    speed = max(1.0, self.s.speed)
-                    step = max(self.s.step, math.ceil(speed * (upload + MIN_GAP)))
-                    self._wait(max(MIN_GAP, step / speed - upload))
-                    offset += step
+                if not self._scroll(cols):
+                    return
                 self._wait(self.s.league_gap)
                 self._maybe_flash()
             if not self.s.loop:

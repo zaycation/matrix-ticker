@@ -58,6 +58,15 @@ Everything you change is saved. **Window opacity** (under Options) makes the win
 **Favorite teams:** type them under Show, like `Bears, Sparks` (team names or abbreviations).
 Turn on **Only my teams** to hide every other game. **Test alert** shows a sample on the display.
 
+**Breaking news:** tick **NEWS** for the latest headlines from the sports you show. New ones also
+cut in as they break (**All sports**, at most one every 10 minutes, or **My teams** only). Pick under Show.
+
+**Ping:** the dashboard's top-right corner takes turns between the date and your ping (green, gold,
+red, or **DOWN**). Change it under Options → Dashboard corner.
+
+**Earthquakes:** magnitude 3.5+ within 50 miles of your weather location cut in right away
+(**QUAKE M4.1**, then how far and which way). Change the distance or turn it off under Weather.
+
 **Fantasy football (Sleeper):** tick **FANTASY** and type your Sleeper username. Your matchup
 scrolls by (green when you're winning), and with alerts on, a starter's big play flashes up, like
 `J. ALLEN +6.4`. Type part of a league name to show just that league.
@@ -107,5 +116,5 @@ press Run (if it's open). You don't need it installed. Use **Launch NexLinq** to
 
 ---
 
-MIT licensed. Scores from ESPN. Fantasy from Sleeper. Weather by [Open-Meteo.com](https://open-meteo.com). Not affiliated with Phanteks.
+MIT licensed. Scores and news from ESPN. Fantasy from Sleeper. Earthquakes from the USGS. Weather by [Open-Meteo.com](https://open-meteo.com). Not affiliated with Phanteks.
 Developers: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/PROTOCOL.md](docs/PROTOCOL.md).

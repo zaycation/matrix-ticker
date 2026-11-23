@@ -82,6 +82,8 @@ class App:
     WMODES_REV = {v: k for k, v in WMODES.items()}
     COUNTS = {"daily": range(1, 15), "hourly": range(1, 25)}    # Open-Meteo gives 16 days ahead
     CPU_METERS = {"Load": "load", "Busiest core": "peak", "RAM": "ram"}
+    NEWS_MODES = {"All sports": "all", "My teams": "mine", "Off": "off"}
+    CORNERS = {"Date + ping": "both", "Date": "date", "Ping": "ping"}
     REMIND = {"Off": 0, "2 min before": 2, "5 min before": 5, "10 min before": 10, "15 min before": 15}
     REMIND_REV = {v: k for k, v in REMIND.items()}
     GPU_METERS = {"Temperature": "temp", "Load": "load", "VRAM": "vram", "Power": "power", "Fan": "fan"}
@@ -96,7 +98,7 @@ class App:
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
                     "weather_count", "screen_seconds", "clock_24h", "cpu_meter", "gpu_meter",
                     "favorites", "favorites_only", "alerts", "sleeper_user", "sleeper_league", "keep_awake", "calendar_url", "meeting_window",
-                    "meeting_alert"):
+                    "meeting_alert", "news_alerts", "quake_alerts", "quake_radius", "dashboard_corner"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
@@ -187,6 +189,13 @@ class App:
         self.alerts_on = tk.BooleanVar(value=self.settings.alerts)
         self._switch(fsw, "Only my teams", self.fav_only, self._favorites_changed).pack(side="left", padx=(0, 14))
         self._switch(fsw, "Big-moment alerts", self.alerts_on, self._favorites_changed).pack(side="left")
+        nrow = ctk.CTkFrame(box2, fg_color="transparent")
+        nrow.grid(row=4, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        ctk.CTkLabel(nrow, text="Breaking news alerts", text_color=FG, font=font()).pack(side="left")
+        rev = lambda d, v: next((k for k, x in d.items() if x == v), next(iter(d)))
+        self.news_mode = tk.StringVar(value=rev(self.NEWS_MODES, self.settings.news_alerts))
+        self._dropdown(nrow, self.news_mode, list(self.NEWS_MODES), 116,
+                       lambda _v: self._favorites_changed()).pack(side="left", padx=(8, 0))
 
         # weather
         box_w = self._card(left, "Weather")
@@ -210,6 +219,14 @@ class App:
         self._dropdown(menus, self.wmode, list(self.WMODES), 80, self._mode_changed).pack(side="left", padx=(6, 0))
         self._fill_counts()
         box_w.columnconfigure(1, weight=1)
+        qrow = ctk.CTkFrame(box_w, fg_color="transparent")
+        qrow.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.quake_on = tk.BooleanVar(value=self.settings.quake_alerts)
+        self._switch(qrow, "Earthquake alerts within", self.quake_on, self._location_changed).pack(side="left")
+        self.quake_radius = tk.StringVar(value=f"{self.settings.quake_radius} mi")
+        self._dropdown(qrow, self.quake_radius, ["25 mi", "50 mi", "75 mi", "100 mi"], 84,
+                       lambda _v: self._location_changed()).pack(side="left", padx=(8, 0))
+        ctk.CTkLabel(qrow, text="(M3.5+)", text_color=MUTED, font=font(11)).pack(side="left", padx=(6, 0))
 
         # timer (only shown when TIMER is ticked)
         self.left = left
@@ -271,6 +288,11 @@ class App:
         self._dropdown(meters, self.cpu_meter, list(self.CPU_METERS), 128, self._meters_changed).pack(side="left")
         ctk.CTkLabel(meters, text="GPU", text_color=MUTED, font=font(12)).pack(side="left", padx=(12, 4))
         self._dropdown(meters, self.gpu_meter, list(self.GPU_METERS), 128, self._meters_changed).pack(side="left")
+        crow = ctk.CTkFrame(box_o, fg_color="transparent")
+        crow.grid(row=4, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        ctk.CTkLabel(crow, text="Dashboard corner", text_color=FG, font=font(), width=110, anchor="w").pack(side="left")
+        self.corner = tk.StringVar(value=rev(self.CORNERS, self.settings.dashboard_corner))
+        self._dropdown(crow, self.corner, list(self.CORNERS), 128, self._meters_changed).pack(side="left", padx=(8, 0))
 
         # meetings (only shown when MEETINGS is ticked)
         self.meetings_box = box_m = self._card(right, "Meetings (calendar)", pack=False)
@@ -341,7 +363,7 @@ class App:
                                      font=ctk.CTkFont(family="Consolas", size=12), wrap="word",
                                      state="disabled", activate_scrollbars=True)
         self.logbox.pack(fill="both", expand=True, pady=(10, 0))
-        ctk.CTkLabel(outer, text=f"{'v' + __version__ if updates.parse(__version__) else 'dev'}  ·  Scores: ESPN  ·  Fantasy: Sleeper  ·  Weather: Open-Meteo.com",
+        ctk.CTkLabel(outer, text=f"{'v' + __version__ if updates.parse(__version__) else 'dev'}  ·  Scores & news: ESPN  ·  Fantasy: Sleeper  ·  Weather: Open-Meteo.com  ·  Quakes: USGS",
                      text_color=MUTED,
                      font=font(10)).pack(anchor="e", pady=(4, 0))
 
@@ -597,12 +619,15 @@ class App:
         self.settings.units = self.units.get().lstrip("°")
         self.settings.weather_mode = self.WMODES[self.wmode.get()]
         self.settings.weather_count = int(self.wcount.get() or 5)
+        self.settings.quake_alerts = self.quake_on.get()
+        self.settings.quake_radius = int(self.quake_radius.get().split()[0])
         self._schedule_save()
 
     def _favorites_changed(self):
         self.settings.favorites = self.favorites.get().strip()
         self.settings.favorites_only = self.fav_only.get()
         self.settings.alerts = self.alerts_on.get()
+        self.settings.news_alerts = self.NEWS_MODES[self.news_mode.get()]
         self._schedule_save()
 
     def test_alert(self):
@@ -616,6 +641,7 @@ class App:
     def _meters_changed(self, _v=None):
         self.settings.cpu_meter = self.CPU_METERS[self.cpu_meter.get()]
         self.settings.gpu_meter = self.GPU_METERS[self.gpu_meter.get()]
+        self.settings.dashboard_corner = self.CORNERS[self.corner.get()]
         self._schedule_save()
 
     def _boot_changed(self):
@@ -653,7 +679,9 @@ class App:
                       "favorites": s.favorites, "favorites_only": s.favorites_only, "alerts": s.alerts,
                       "sleeper_user": s.sleeper_user, "sleeper_league": s.sleeper_league,
                       "keep_awake": s.keep_awake, "calendar_url": s.calendar_url,
-                      "meeting_window": s.meeting_window, "meeting_alert": s.meeting_alert}
+                      "meeting_window": s.meeting_window, "meeting_alert": s.meeting_alert,
+                      "news_alerts": s.news_alerts, "quake_alerts": s.quake_alerts, "quake_radius": s.quake_radius,
+                      "dashboard_corner": s.dashboard_corner}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 
@@ -675,6 +703,11 @@ class App:
         self.fav_only.set(d.favorites_only)
         self.alerts_on.set(d.alerts)
         self._favorites_changed()          # favorite teams themselves are kept
+        self.news_mode.set("All sports")
+        self._favorites_changed()
+        self.quake_on.set(d.quake_alerts)
+        self.quake_radius.set(f"{d.quake_radius} mi")
+        self.corner.set("Date + ping")
         self.cpu_meter.set("Load")
         self.gpu_meter.set("Temperature")
         self._meters_changed()
