@@ -1,10 +1,14 @@
-"""Ping for the dashboard: how long a quick connection to the internet takes.
+"""Ping for the dashboard: round trip to Cloudflare's 1.1.1.1, like `ping 1.1.1.1`.
 
-Real ICMP ping needs admin rights on Windows, so this times a TCP connection to Cloudflare's
-1.1.1.1 instead (one network round trip, the same number ping shows, give or take a ms).
+On Windows this uses the same system call as ping.exe (IcmpSendEcho in iphlpapi.dll), which
+needs no admin rights. Elsewhere, or if that fails, it falls back to timing a TCP connection,
+which can read noticeably high on Windows (connection setup and security software add time).
 A background thread measures every 2 seconds; ping() returns the latest result.
 """
+import ctypes
 import socket
+import struct
+import sys
 import threading
 import time
 
@@ -17,8 +21,45 @@ _state = {"ms": None, "fails": 0, "thread": None, "last": 0.0}
 _lock = threading.Lock()
 
 
+_icmp = {"handle": None, "failed": False}
+
+
+def icmp_ping(host=HOST, timeout=TIMEOUT_S):
+    """Real ping through Windows' ICMP API. ms, None if no reply, or raises if unavailable."""
+    if sys.platform != "win32":
+        raise OSError("ICMP API is Windows-only")
+    lib = ctypes.windll.iphlpapi
+    if _icmp["handle"] is None:
+        lib.IcmpCreateFile.restype = ctypes.c_void_p
+        lib.IcmpSendEcho.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_uint16,
+                                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32]
+        lib.IcmpSendEcho.restype = ctypes.c_uint32
+        handle = lib.IcmpCreateFile()
+        if not handle or handle == ctypes.c_void_p(-1).value:
+            raise OSError("IcmpCreateFile failed")
+        _icmp["handle"] = handle
+    addr = int.from_bytes(socket.inet_aton(host), "little")      # IPAddr: network byte order in memory
+    data = b"matrix-ticker-ping".ljust(32, b".")
+    reply = ctypes.create_string_buffer(256)
+    n = lib.IcmpSendEcho(_icmp["handle"], addr, data, len(data), None, reply, len(reply), int(timeout * 1000))
+    if not n:
+        return None
+    _address, status, rtt = struct.unpack_from("<III", reply.raw)  # ICMP_ECHO_REPLY: Address, Status, RTT
+    return float(rtt) if status == 0 else None
+
+
 def measure(host=HOST, port=PORT, timeout=TIMEOUT_S):
-    """One round trip in ms, or None if it failed."""
+    """One round trip in ms, or None if it failed. Real ping when possible."""
+    if not _icmp["failed"]:
+        try:
+            return icmp_ping(host, timeout)
+        except Exception:
+            _icmp["failed"] = True         # not Windows, or the API isn't there: use TCP from now on
+    return tcp_ping(host, port, timeout)
+
+
+def tcp_ping(host=HOST, port=PORT, timeout=TIMEOUT_S):
+    """Time a TCP connection (a round trip plus connection-setup overhead)."""
     t0 = time.perf_counter()
     try:
         with socket.create_connection((host, port), timeout=timeout):
