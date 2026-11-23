@@ -45,6 +45,23 @@ def _get(url, params):
         return json.load(r)
 
 
+def _utc_offset(tz_name, when):
+    try:
+        from zoneinfo import ZoneInfo
+        return when.astimezone(ZoneInfo(tz_name)).utcoffset()
+    except Exception:
+        return None
+
+
+def _prefer_local(hits):
+    """Several places share a name or postal code (91367 is Woodland Hills, CA and also a town
+    in Bavaria). Prefer a match in the PC's own time zone; otherwise keep the search's order."""
+    now = dt.datetime.now().astimezone()
+    mine = now.utcoffset()
+    local = [h for h in hits if h.get("timezone") and _utc_offset(h["timezone"], now) == mine]
+    return (local or hits)[0]
+
+
 def locate(location):
     """-> (lat, lon, display_name). Raises ValueError if nothing matches."""
     loc = (location or "").strip()
@@ -66,7 +83,7 @@ def locate(location):
             hits = narrowed or hits
         if not hits:
             raise ValueError(f"couldn't find '{loc}'")
-        h = hits[0]
+        h = _prefer_local(hits)
         result = (h["latitude"], h["longitude"], h.get("name", loc))
     _geo_cache[loc] = result
     return result
