@@ -37,6 +37,7 @@ class Settings:
     weather_count: int = 5         # how many days / hours to show
     screen_seconds: float = 10.0   # how long each static screen (dashboard, calendar, counter) stays
     clock_24h: bool = False
+    clock_seconds: bool = True     # dashboard clock shows seconds
     favorites: str = ""            # favorite teams, e.g. "Bears, Sparks" (see matrix/favorites.py)
     favorites_only: bool = False   # sports: show only games with a favorite team
     alerts: bool = True            # flash big moments for favorite teams (and fantasy big plays)
@@ -230,13 +231,17 @@ class ScrollTicker:
                 break
             if item == DASHBOARD:
                 buf = screens.dashboard(h24=self.s.clock_24h, cpu_meter=self.s.cpu_meter, gpu_meter=self.s.gpu_meter,
-                                        corner=self.s.dashboard_corner)
+                                        corner=self.s.dashboard_corner, seconds=self.s.clock_seconds)
             elif item == CALENDAR:
                 buf = screens.calendar()
             else:
                 buf = screens.counter(self.counter.label, self.counter.count)
             took = self._frame(buf)
-            self._wait(max(MIN_GAP, 1.0 - took))
+            if item == DASHBOARD and self.s.clock_seconds:
+                # redraw just after each new second starts, so the seconds tick evenly (no skips)
+                self._wait(max(MIN_GAP, 1.0 - (time.time() % 1.0) + 0.02))
+            else:
+                self._wait(max(MIN_GAP, 1.0 - took))
         return True
 
     def _strip(self, item):

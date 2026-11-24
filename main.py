@@ -178,7 +178,7 @@ def run_scroll(panel, args, leagues):
                         weather_mode="hourly" if args.hourly else "daily", weather_count=args.count,
                         screen_seconds=args.screen_seconds, clock_24h=args.h24,
                         cpu_meter=args.cpu_meter, gpu_meter=args.gpu_meter,
-                        keep_awake=not args.allow_sleep, calendar_url=args.ical,
+                        keep_awake=not args.allow_sleep, clock_seconds=not args.no_seconds, calendar_url=args.ical,
                         message_topic=args.topic, quake_alerts=args.quake_radius > 0,
                         quake_radius=args.quake_radius or 50, dashboard_corner=args.corner, favorites=args.favorites, sleeper_user=args.sleeper, sleeper_league=args.sleeper_league, favorites_only=args.only_favorites, alerts=not args.no_alerts,
                         verbose=args.verbose, league_gap=args.league_gap)
@@ -252,6 +252,7 @@ def main():
     ap.add_argument("--topic", default="", help="ntfy topic for --messages (the app's Messages section shows yours)")
     ap.add_argument("--quake-radius", type=int, default=50, help="earthquake alerts within this many miles (0 = off)")
     ap.add_argument("--corner", default="both", choices=["both", "date", "ping"], help="dashboard top-right corner")
+    ap.add_argument("--no-seconds", action="store_true", help="dashboard clock without seconds")
     ap.add_argument("--allow-sleep", action="store_true", help="let Windows go to sleep while running")
     ap.add_argument("--timer", type=float, default=0, metavar="MINUTES",
                     help="start a countdown that takes over the panel (scroll style)")

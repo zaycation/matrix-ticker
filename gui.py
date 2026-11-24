@@ -95,7 +95,7 @@ class App:
 
         saved = load_cfg().get("gui", {})
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
-                    "weather_count", "screen_seconds", "clock_24h", "cpu_meter", "gpu_meter",
+                    "weather_count", "screen_seconds", "clock_24h", "clock_seconds", "cpu_meter", "gpu_meter",
                     "favorites", "favorites_only", "alerts", "sleeper_user", "sleeper_league", "keep_awake", "calendar_url", "meeting_window",
                     "meeting_alert", "message_topic", "quake_alerts", "quake_radius", "dashboard_corner"):
             if key in saved:
@@ -284,10 +284,12 @@ class App:
         self.h24 = tk.BooleanVar(value=self.settings.clock_24h)
         self.awake = tk.BooleanVar(value=self.settings.keep_awake)
         self.on_boot = tk.BooleanVar(value=autostart.enabled())
+        self.seconds = tk.BooleanVar(value=self.settings.clock_seconds)
         sw = ctk.CTkFrame(box_o, fg_color="transparent")
         sw.grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 2))
         for i, (text, var, cmd) in enumerate((("Loop", self.loop, self._opts_changed),
                                               ("24-hour clock", self.h24, self._opts_changed),
+                                              ("Clock shows seconds", self.seconds, self._opts_changed),
                                               ("Start ticker when app opens", self.autorun, self._schedule_save),
                                               ("Keep PC awake while running", self.awake, self._opts_changed),
                                               ("Open when Windows starts", self.on_boot, self._boot_changed))):
@@ -710,6 +712,7 @@ class App:
     def _opts_changed(self):
         self.settings.loop = self.loop.get()
         self.settings.clock_24h = self.h24.get()
+        self.settings.clock_seconds = self.seconds.get()
         self.settings.keep_awake = self.awake.get()
         self._schedule_save()
 
@@ -728,7 +731,7 @@ class App:
                       "location": s.location, "units": s.units, "weather_mode": s.weather_mode,
                       "weather_count": s.weather_count,
                       "autorun": self.autorun.get(), "screen_seconds": s.screen_seconds,
-                      "clock_24h": s.clock_24h, "opacity": self.opacity.get(),
+                      "clock_24h": s.clock_24h, "clock_seconds": s.clock_seconds, "opacity": self.opacity.get(),
                       "cpu_meter": s.cpu_meter, "gpu_meter": s.gpu_meter,
                       "favorites": s.favorites, "favorites_only": s.favorites_only, "alerts": s.alerts,
                       "sleeper_user": s.sleeper_user, "sleeper_league": s.sleeper_league,
@@ -754,6 +757,7 @@ class App:
         self._fill_counts()
         self.wcount.set(str(d.weather_count))
         self.h24.set(False)
+        self.seconds.set(d.clock_seconds)
         self.awake.set(d.keep_awake)
         self.fav_only.set(d.favorites_only)
         self.alerts_on.set(d.alerts)

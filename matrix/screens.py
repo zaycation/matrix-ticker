@@ -54,11 +54,19 @@ def _clock_text(now, h24):
 RIGHT = W                              # right-aligned content ends just before this x
 PAIR_GAP = 2                           # columns between "NOV" and "23", and "5" and "MS"
 CORNER_SWAP_S = 4                      # "both": switch between date and ping this often
-CORNER_W = 32                          # right-hand corner width, so the clock never shifts
+CORNER_W = 15                          # right-hand corner (two small lines), widest: DOWN
+DIGIT_W = 5                            # clock digits get same-width slots, so seconds don't wiggle
+
+
+def _stack(c, top, top_rgb, bottom, bottom_rgb):
+    """Two lines of small text in the right-hand corner (rows 0-4 and 5-9), right-aligned."""
+    c.small(top, RIGHT - small_width(top), 0, top_rgb)
+    if bottom:
+        c.small(bottom, RIGHT - small_width(bottom), 5, bottom_rgb)
 
 
 def _ping_corner(c):
-    """'14MS' (green / gold / red by quality) or 'DOWN' in red. False if no reading yet."""
+    """14 over MS (green / gold / red by quality), or DOWN in red. False if no reading yet."""
     ms = network.ping()
     if ms is None and not network.started():
         return False
@@ -67,21 +75,27 @@ def _ping_corner(c):
     else:
         text = f"{ms:.0f}"
         color = (37, 200, 100) if ms < network.GOOD_MS else GOLD if ms < network.OK_MS else RED
-    unit = "" if ms is None else "MS"
-    w = normal_width(text) + (PAIR_GAP + normal_width(unit) if unit else 0)
-    x = c.normal(text, RIGHT - w, 1, color)
-    if unit:
-        c.normal(unit, x + PAIR_GAP, 1, WHITE)
+    _stack(c, text, color, "" if ms is None else "MS", WHITE)
     return True
 
 
 def _date_corner(c, now):
-    month, day = MONTHS[now.month - 1], str(now.day)
-    x = c.normal(month, RIGHT - (normal_width(month) + PAIR_GAP + normal_width(day)), 1, WHITE)
-    c.normal(day, x + PAIR_GAP, 1, CYAN)
+    _stack(c, MONTHS[now.month - 1], WHITE, str(now.day), CYAN)
 
 
-def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="load", corner="both"):
+def _clock_width(text):
+    return sum(DIGIT_W if ch.isdigit() else big_width(ch) for ch in text) + len(text) - 1
+
+
+def _draw_clock(c, text, x, rgb):
+    """Big clock with every digit in a DIGIT_W-wide slot (a narrow 1 is centered in its slot)."""
+    for ch in text:
+        w = DIGIT_W if ch.isdigit() else big_width(ch)
+        c.big(ch, x + (w - big_width(ch)) // 2, rgb)
+        x += w + 1
+
+
+def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="load", corner="both", seconds=True):
     """CPU / GPU meters, big clock, and a corner with the date, ping, or both taking turns.
     Meters: see system.CPU_METERS / GPU_METERS (GPU ones need an NVIDIA card)."""
     now = now or dt.datetime.now()
@@ -93,9 +107,9 @@ def dashboard(now=None, h24=False, cpu_meter="load", gpu_meter="load", corner="b
     show_ping = corner == "ping" or (corner == "both" and int(time.time() // CORNER_SWAP_S) % 2 == 1)
     if not (show_ping and _ping_corner(c)):
         _date_corner(c, now)
-    clock = _clock_text(now, h24)
-    left, right = widget_end + 1, RIGHT - CORNER_W - 2                  # center the clock in the gap
-    c.big(clock, left + max(0, (right - left - big_width(clock)) // 2), WHITE)
+    clock = _clock_text(now, h24) + (f":{now.second:02d}" if seconds else "")
+    left, right = widget_end + 1, RIGHT - CORNER_W - 1                  # center the clock in the gap
+    _draw_clock(c, clock, left + max(0, (right - left - _clock_width(clock)) // 2), WHITE)
     return c.to_bytes()
 
 
