@@ -37,7 +37,8 @@ SKIP_HEADINGS = re.compile(r"^(hotfixes|developers?'? ?notes?|known issues|last 
 
 DEFAULT_GAMES = [
     {"name": "WoW Forever", "url": "https://news.blizzard.com/en-us/article/24315281"},
-    {"name": "GTA 6", "url": ""},
+    {"name": "GTA 6", "url": "https://support.rockstargames.com/articles/sN5pEdFYZdlvijKXd6xpJ/"
+                              "grand-theft-auto-vi-launch-updates-ps5-xbox-series-x-or-s"},
 ]
 
 
@@ -149,6 +150,9 @@ def shorten(text, n=70):
     return t
 
 
+GENERIC_RE = re.compile(r"^(GENERAL|MISC|MISCELLANEOUS|OTHER|FIXES|BUG FIXES)?(\s*[/&,]\s*(GENERAL|MISC|MISCELLANEOUS|OTHER))*$")
+
+
 def summarize(section, top=3):
     """-> (n_changes, [(category, change)]) for one dated section."""
     _date_, header, body = section
@@ -189,7 +193,7 @@ def summarize(section, top=3):
     # don't repeat a label for consecutive changes in the same category
     out, prev = [], None
     for label, change in picks:
-        out.append(("" if label == prev else label, change))
+        out.append(("" if label == prev or GENERIC_RE.match(label) else label, change))
         prev = label
     return n, out
 
@@ -293,7 +297,11 @@ def segments(game, upd):
     """Scrolling summary: WOW FOREVER UPDATE : NOV 23  6 CHANGES  CLASSES: DRUID ..  DUNGEONS: .."""
     segs = [(clean(game, 20), LABEL), (" UPDATE : ", style.GRAY)]
     if upd.get("headline"):
-        return segs + [(clean(upd["headline"], 160), style.WHITE)]
+        head = clean(upd["headline"], 160)
+        name = clean(game, 20)
+        if head.startswith(name + " "):        # "GTA 6 UPDATE 01.002.002 ..." already names the game
+            return [(name, LABEL), (head[len(name):], style.WHITE)]
+        return segs + [(head, style.WHITE)]
     d = upd["date"]
     segs += [(f"{d.strftime('%b').upper()} {d.day}", DATE_RGB),
              (f"  {upd['changes']} CHANGE{'S' if upd['changes'] != 1 else ''}", COUNT_RGB)]
