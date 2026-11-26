@@ -17,6 +17,7 @@ import html
 import re
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -193,19 +194,53 @@ def summarize(section, top=3):
     return n, out
 
 
-class _Redirects(urllib.request.HTTPRedirectHandler):
-    """Also follow 308 (Permanent Redirect); older Pythons' urllib only follows 301/302/303/307."""
-    def http_error_308(self, req, fp, code, msg, headers):
-        return self.http_error_301(req, fp, 301, msg, headers)
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    """Hand redirects back to fetch(), which follows them itself (see there)."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
-_opener = urllib.request.build_opener(_Redirects)
+_opener = urllib.request.build_opener(_NoRedirects)
+_REFRESH_RE = re.compile(r"url\s*=\s*['\"]?([^'\";>\s]+)", re.I)
+_META_REFRESH_RE = re.compile(r"<meta[^>]+http-equiv=['\"]?refresh['\"]?[^>]*content=['\"][^'\"]*?url=([^'\">]+)", re.I)
+_NEXT_REDIRECT_RE = re.compile(r"NEXT_REDIRECT;(?:push|replace);([^;\"\\]+);30[178]")
 
 
-def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"})
-    with _opener.open(req, timeout=25) as r:
-        return r.read().decode(r.headers.get_content_charset() or "utf-8", "replace")
+def _redirect_target(headers, body):
+    """Where a 3xx response points: Location header, else Refresh header, else a meta refresh
+    or Next.js redirect marker in the body (some sites send 308 without a Location header)."""
+    if headers.get("Location"):
+        return headers["Location"]
+    m = _REFRESH_RE.search(headers.get("Refresh") or "")
+    if m:
+        return m.group(1)
+    text = body.decode("utf-8", "replace")
+    for pat in (_META_REFRESH_RE, _NEXT_REDIRECT_RE):
+        m = pat.search(text)
+        if m:
+            return html.unescape(m.group(1))
+    return None
+
+
+def fetch(url, hops=6):
+    """GET a page as text, following redirects (including ones Python can't follow itself)."""
+    for _ in range(hops):
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9",
+                                                   "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"})
+        try:
+            with _opener.open(req, timeout=25) as r:
+                return r.read().decode(r.headers.get_content_charset() or "utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            if e.code not in (301, 302, 303, 307, 308):
+                raise
+            body = e.read() or b""
+            target = _redirect_target(e.headers, body)
+            if not target:
+                heads = "; ".join(f"{k}: {v}" for k, v in e.headers.items())
+                snippet = re.sub(r"\s+", " ", body[:300].decode("utf-8", "replace"))
+                raise RuntimeError(f"{e.code} redirect with no address to follow. Headers: {heads} | Body: {snippet}")
+            url = urllib.parse.urljoin(url, target)
+    raise RuntimeError(f"too many redirects (last: {url})")
 
 
 def page_update(url, fetcher=fetch):
