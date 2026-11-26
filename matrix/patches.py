@@ -126,7 +126,11 @@ def sections(page_html):
 
 
 _TRIM = [
-    (r"^fixed an? (issue|bug) (that resulted in|that caused|that could cause|in which|where|that|which|with|causing)\s+", "FIXED: "),
+    (r"^fixed (an?|several|multiple|some|various) (issues?|bugs?|crash(es)?) (that|which) (caused|could cause|"
+     r"resulted in) (the game|clients?|the client) (to crash|crashing|crashes?)\b", "FIXED: CRASHES"),
+    (r"^fixed (several|multiple|some|various) crash(es)?\b", "FIXED: CRASHES"),
+    (r"^fixed (an?|several|multiple|some|various) (issues?|bugs?) (that resulted in|that caused|that could cause|"
+     r"in which|where|that|which|with|causing)\s+", "FIXED: "),
     (r"^fixed\s+", "FIXED: "),
     (r"\bnow correctly\b", "now"),
     (r"\bas intended\b|\bthan intended\b", ""),
@@ -146,8 +150,10 @@ def shorten(text, n=70):
 
 def summarize(section, top=3):
     """-> (n_changes, [(category, change)]) for one dated section."""
-    _date_, _header, body = section
-    category, parents, picks, seen, n = "", {}, [], set(), 0
+    _date_, header, body = section
+    # "[November 23, 2026] - General / Miscellaneous": what follows the date is the first category
+    category = re.sub(r"^\W*\w+\s+\d{1,2},?\s+\d{4}\W*", "", header).strip(" -\u2013\u2014")
+    parents, leaves, seen, n = {}, [], set(), 0
     for i, (kind, depth, text) in enumerate(body):
         if kind == "head" or (kind == "text" and depth == 0 and len(text) < 40):
             if not SKIP_HEADINGS.match(text):
@@ -164,15 +170,41 @@ def summarize(section, top=3):
         n += 1
         label = parents.get(depth - 1) if depth > 1 else category
         key = (category or label or "").lower()
+        leaves.append((key, clean(label or category or "", 24), shorten(text)))
+    # one change from each of the first `top` categories; if there are fewer categories than
+    # that, fill up with further changes (a one-category update still shows 3 changes)
+    picks = []
+    for key, label, change in leaves:
         if key not in seen and len(picks) < top:
             seen.add(key)
-            picks.append((clean(label or category or "", 24), shorten(text)))
-    return n, picks
+            picks.append((label, change))
+    for key, label, change in leaves:
+        if len(picks) >= top:
+            break
+        if (label, change) not in picks:
+            picks.append((label, change))
+    order = {lc: i for i, lc in enumerate((lab, ch) for _, lab, ch in leaves)}
+    picks.sort(key=lambda p: order[p])
+    # don't repeat a label for consecutive changes in the same category
+    out, prev = [], None
+    for label, change in picks:
+        out.append(("" if label == prev else label, change))
+        prev = label
+    return n, out
+
+
+class _Redirects(urllib.request.HTTPRedirectHandler):
+    """Also follow 308 (Permanent Redirect); older Pythons' urllib only follows 301/302/303/307."""
+    def http_error_308(self, req, fp, code, msg, headers):
+        return self.http_error_301(req, fp, 301, msg, headers)
+
+
+_opener = urllib.request.build_opener(_Redirects)
 
 
 def fetch(url):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"})
-    with urllib.request.urlopen(req, timeout=25) as r:
+    with _opener.open(req, timeout=25) as r:
         return r.read().decode(r.headers.get_content_charset() or "utf-8", "replace")
 
 
@@ -207,7 +239,18 @@ def news_updates(game, fetcher=fetch):
         except ValueError:
             when = None
         out.append((item.findtext("guid") or title, when, title))
+    out.sort(key=lambda h: h[1] or dt.datetime.min, reverse=True)
     return out
+
+
+VERSION_RE = re.compile(r"\b(\d{1,2}\.\d{2,3}\.\d{2,3}|\d+\.\d+\.\d+\.\d+|(?:update|patch|hotfix)\s+\d+(?:\.\d+)+)\b", re.I)
+
+
+def version_of(title):
+    """'GTA 6 Update 01.002.002 Patch Notes' -> '01.002.002' (so many articles about one patch
+    count as one update). None if the headline names no version."""
+    m = VERSION_RE.search(title)
+    return re.sub(r"^(update|patch|hotfix)\s+", "", m.group(1), flags=re.I).lower() if m else None
 
 
 # ---------- display ----------
@@ -258,8 +301,10 @@ class Watcher(threading.Thread):
             if not heads:
                 return
             gid, when, title = heads[0]
-            upd = {"date": (when or dt.datetime.utcnow()).date(), "headline": title}
-            key = gid
+            upd = {"date": (when or dt.datetime.now(dt.timezone.utc)).date(), "headline": title}
+            # one cut-in per update: articles naming the same version (or, with no version,
+            # published the same day) are all the same news
+            key = version_of(title) or f"day:{upd['date']}"
         with self.lock:
             first = name not in self.seen
             changed = self.seen.get(name) != key
