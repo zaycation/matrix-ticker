@@ -96,7 +96,7 @@ class App:
         saved = load_cfg().get("gui", {})
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
                     "weather_count", "screen_seconds", "clock_24h", "clock_seconds", "cpu_meter", "gpu_meter",
-                    "favorites", "favorites_only", "alerts", "sleeper_user", "sleeper_league", "keep_awake", "calendar_url", "meeting_window",
+                    "favorites", "favorites_only", "alerts", "live_delay", "sleeper_user", "sleeper_league", "keep_awake", "calendar_url", "meeting_window",
                     "meeting_alert", "message_topic", "patch_games", "quake_alerts", "quake_radius", "dashboard_corner"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
@@ -191,6 +191,10 @@ class App:
         self.alerts_on = tk.BooleanVar(value=self.settings.alerts)
         self._switch(fsw, "Only my teams", self.fav_only, self._favorites_changed).pack(side="left", padx=(0, 14))
         self._switch(fsw, "Big-moment alerts", self.alerts_on, self._favorites_changed).pack(side="left")
+        ctk.CTkLabel(fsw, text="Delay", text_color=MUTED, font=font(12)).pack(side="left", padx=(14, 6))
+        self.delay = tk.StringVar(value=self._delay_label(self.settings.live_delay))
+        self._dropdown(fsw, self.delay, ["Live", "15s", "30s", "45s", "60s", "90s"], 70,
+                       lambda _v: self._favorites_changed()).pack(side="left")
 
         # weather
         box_w = self._card(left, "Weather")
@@ -254,7 +258,7 @@ class App:
         self.patch_rows = []
         for r, g in enumerate(games, start=1):
             name = self._hint_entry(box_p, "Game", g.get("name", ""), 110, self._patches_changed)
-            url = self._hint_entry(box_p, "Official notes page (blank = watch the news)", g.get("url", ""), 350,
+            url = self._hint_entry(box_p, "Official patch notes page link", g.get("url", ""), 350,
                                    self._patches_changed)
             name.grid(row=r, column=0, sticky="w", pady=2)
             url.grid(row=r, column=1, columnspan=3, sticky="w", padx=(6, 0), pady=2)
@@ -715,7 +719,13 @@ class App:
         self.settings.quake_radius = int(self.quake_radius.get().split()[0])
         self._schedule_save()
 
+    @staticmethod
+    def _delay_label(sec):
+        return f"{sec}s" if sec else "Live"
+
     def _favorites_changed(self):
+        """Also the live delay: scores, alerts and fantasy run this far behind so they don't beat a stream."""
+        self.settings.live_delay = 0 if self.delay.get() == "Live" else int(self.delay.get().rstrip("s"))
         self.settings.favorites = self.favorites.get().strip()
         self.settings.favorites_only = self.fav_only.get()
         self.settings.alerts = self.alerts_on.get()
@@ -769,7 +779,7 @@ class App:
                       "clock_24h": s.clock_24h, "clock_seconds": s.clock_seconds, "opacity": self.opacity.get(),
                       "cpu_meter": s.cpu_meter, "gpu_meter": s.gpu_meter,
                       "favorites": s.favorites, "favorites_only": s.favorites_only, "alerts": s.alerts,
-                      "sleeper_user": s.sleeper_user, "sleeper_league": s.sleeper_league,
+                      "live_delay": s.live_delay, "sleeper_user": s.sleeper_user, "sleeper_league": s.sleeper_league,
                       "keep_awake": s.keep_awake, "calendar_url": s.calendar_url,
                       "meeting_window": s.meeting_window, "meeting_alert": s.meeting_alert,
                       "message_topic": s.message_topic, "patch_games": s.patch_games,
@@ -796,6 +806,7 @@ class App:
         self.awake.set(d.keep_awake)
         self.fav_only.set(d.favorites_only)
         self.alerts_on.set(d.alerts)
+        self.delay.set(self._delay_label(d.live_delay))
         self._favorites_changed()          # favorite teams themselves are kept
         self.quake_on.set(d.quake_alerts)
         self.quake_radius.set(f"{d.quake_radius} mi")

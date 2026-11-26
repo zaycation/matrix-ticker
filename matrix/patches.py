@@ -1,13 +1,9 @@
 """Patch notes for games you pick: a quick summary on the panel when a game is updated.
 
-Two kinds of source, per game:
-
-- An official notes page (preferred): one page that gains a new dated section per update,
-  like Blizzard's "WoW: Forever Hotfixes" or Rockstar Support's "Title Update Notes"
-  ("November 23, 2026" or "[October 27, 2026] - PC"). The newest section is summarized:
-  date, number of changes, and the first change in each of the top categories.
-- No page yet: watch news headlines (Google News search) for "<game>" + "patch notes"
-  and announce new ones, so you hear about notes the moment they're posted somewhere.
+Each game needs its official notes page: one page that gains a new dated section per update,
+like Blizzard's "WoW: Forever Hotfixes" or Rockstar Support's "Launch Updates"
+("November 23, 2026" or "[November 23, 2026] - General"). The newest section is summarized:
+date, number of changes, and a few short changes from the top categories.
 
 Pages are checked every CHECK_S; the first check is only a baseline (no cut-in), but a
 recent update (within RECENT_DAYS) still shows in the cycle as the PATCHES item.
@@ -20,7 +16,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 
 from . import style
@@ -136,18 +131,35 @@ _TRIM = [
     (r"^fixed\s+", "FIXED: "),
     (r"\bnow correctly\b", "now"),
     (r"\bas intended\b|\bthan intended\b", ""),
+    (r"\bmore quickly\b", "faster"),
+    (r"\bmore slowly\b", "slower"),
     (r"\s+", " "),
 ]
 
 
-def shorten(text, n=70):
+_CLAUSE = re.compile(r",\s|;\s|\s-\s|\s\((?=\w)|\s(?:after|when|while|if|because|so that|which|during|until|"
+                     r"unless|before|for players who|in some cases)\s", re.I)
+_PLACE = re.compile(r"^([A-Z][\w'.]*(?: [\w'.]+){0,3})\s+[-\u2013\u2014]\s+(.+)$")   # "Desolace - The centaurs ..."
+
+
+def shorten(text, n=56):
+    """One change -> (place or None, SHORT TEXT, was_cut). Long changes are cut at a clause
+    ("..., after ...") rather than mid-sentence; was_cut says if a word had to be chopped."""
     t = text.strip().rstrip(".")
+    place = None
+    m = _PLACE.match(t)
+    if m:
+        place, t = clean(m.group(1), 18), m.group(2)
     for pat, rep in _TRIM:
         t = re.sub(pat, rep, t, flags=re.I)
-    t = clean(t, 400)
-    if len(t) > n:
-        t = t[:n].rsplit(" ", 1)[0].rstrip(" ,;:-") + ".."
-    return t
+    t = clean(re.sub(r"^the\s+", "", t, flags=re.I), 400)
+    t = re.sub(r"^(FIXED: )THE ", r"\1", t)
+    if len(t) <= n:
+        return place, t, False
+    cuts = [c.start() for c in _CLAUSE.finditer(t) if 16 <= c.start() <= n]
+    if cuts:
+        return place, t[:cuts[-1]].rstrip(" ,;:-("), False
+    return place, t[:n].rsplit(" ", 1)[0].rstrip(" ,;:-") + "..", True
 
 
 GENERIC_RE = re.compile(r"^(GENERAL|MISC|MISCELLANEOUS|OTHER|FIXES|BUG FIXES)?(\s*[/&,]\s*(GENERAL|MISC|MISCELLANEOUS|OTHER))*$")
@@ -175,25 +187,33 @@ def summarize(section, top=3):
         n += 1
         label = parents.get(depth - 1) if depth > 1 else category
         key = (category or label or "").lower()
-        leaves.append((key, clean(label or category or "", 24), shorten(text)))
-    # one change from each of the first `top` categories; if there are fewer categories than
-    # that, fill up with further changes (a one-category update still shows 3 changes)
+        place, change, chopped = shorten(text)
+        label = place or clean(label or category or "", 40)
+        if len(label) > 18 or GENERIC_RE.match(label):
+            label = ""
+        leaves.append((key, label, change, chopped))
+    # one change from each of the first `top` categories (preferring short ones that read
+    # whole); with fewer categories than that, fill up with further changes
+    def readable(lf):
+        return lf[3], len(lf[2]) > 48
     picks = []
-    for key, label, change in leaves:
+    for key, label, change, chopped in sorted(leaves, key=readable):
         if key not in seen and len(picks) < top:
             seen.add(key)
             picks.append((label, change))
-    for key, label, change in leaves:
+    for key, label, change, chopped in sorted(leaves, key=readable):
         if len(picks) >= top:
             break
         if (label, change) not in picks:
             picks.append((label, change))
-    order = {lc: i for i, lc in enumerate((lab, ch) for _, lab, ch in leaves)}
+    order = {}
+    for i, lf in enumerate(leaves):
+        order.setdefault((lf[1], lf[2]), i)
     picks.sort(key=lambda p: order[p])
     # don't repeat a label for consecutive changes in the same category
     out, prev = [], None
     for label, change in picks:
-        out.append(("" if label == prev or GENERIC_RE.match(label) else label, change))
+        out.append(("" if label == prev else label, change))
         prev = label
     return n, out
 
@@ -258,50 +278,10 @@ def page_update(url, fetcher=fetch):
             "key": f"{newest[0]}:{n}"}
 
 
-# ---------- no official page yet: headline watch ----------
-NEWS_URL = "https://news.google.com/rss/search?q={}&hl=en-US&gl=US&ceid=US:en"
-NOTES_WORDS = re.compile(r"patch notes|title update|hotfix|update notes", re.I)
-
-
-def news_updates(game, fetcher=fetch):
-    """Recent 'patch notes' headlines about the game: [(id, published, title)] newest first."""
-    q = urllib.parse.quote(f'"{game}" "patch notes" when:3d')
-    root = ET.fromstring(fetcher(NEWS_URL.format(q)))
-    out = []
-    for item in root.iter("item"):
-        title = html.unescape(item.findtext("title") or "")
-        title = re.sub(r"\s+-\s+[^-]+$", "", title)          # drop " - Site Name"
-        if not NOTES_WORDS.search(title) or game.lower().split()[0] not in title.lower():
-            continue
-        try:
-            when = dt.datetime.strptime(item.findtext("pubDate") or "", "%a, %d %b %Y %H:%M:%S %Z")
-        except ValueError:
-            when = None
-        out.append((item.findtext("guid") or title, when, title))
-    out.sort(key=lambda h: h[1] or dt.datetime.min, reverse=True)
-    return out
-
-
-VERSION_RE = re.compile(r"\b(\d{1,2}\.\d{2,3}\.\d{2,3}|\d+\.\d+\.\d+\.\d+|(?:update|patch|hotfix)\s+\d+(?:\.\d+)+)\b", re.I)
-
-
-def version_of(title):
-    """'GTA 6 Update 01.002.002 Patch Notes' -> '01.002.002' (so many articles about one patch
-    count as one update). None if the headline names no version."""
-    m = VERSION_RE.search(title)
-    return re.sub(r"^(update|patch|hotfix)\s+", "", m.group(1), flags=re.I).lower() if m else None
-
-
 # ---------- display ----------
 def segments(game, upd):
     """Scrolling summary: WOW FOREVER UPDATE : NOV 23  6 CHANGES  CLASSES: DRUID ..  DUNGEONS: .."""
     segs = [(clean(game, 20), LABEL), (" UPDATE : ", style.GRAY)]
-    if upd.get("headline"):
-        head = clean(upd["headline"], 160)
-        name = clean(game, 20)
-        if head.startswith(name + " "):        # "GTA 6 UPDATE 01.002.002 ..." already names the game
-            return [(name, LABEL), (head[len(name):], style.WHITE)]
-        return segs + [(head, style.WHITE)]
     d = upd["date"]
     segs += [(f"{d.strftime('%b').upper()} {d.day}", DATE_RGB),
              (f"  {upd['changes']} CHANGE{'S' if upd['changes'] != 1 else ''}", COUNT_RGB)]
@@ -321,7 +301,7 @@ class Watcher(threading.Thread):
         super().__init__(daemon=True)
         self.s, self.on_alert, self.stop, self.log = settings, on_alert, stop_event, log
         self.interval, self.fetcher = interval, fetcher
-        self.seen, self.latest, self.lock = {}, {}, threading.Lock()
+        self.seen, self.latest, self.lock, self.no_page = {}, {}, threading.Lock(), set()
 
     def recent(self, today=None):
         """[(game, update)] updated in the last RECENT_DAYS, for the PATCHES item."""
@@ -334,28 +314,22 @@ class Watcher(threading.Thread):
         name = game.strip()
         if not name:
             return
-        if url.strip():
-            upd = page_update(url.strip(), self.fetcher)
-            if not upd:
-                return
-            key = upd["key"]
-        else:
-            heads = news_updates(name, self.fetcher)
-            if not heads:
-                return
-            gid, when, title = heads[0]
-            upd = {"date": (when or dt.datetime.now(dt.timezone.utc)).date(), "headline": title}
-            # one cut-in per update: articles naming the same version (or, with no version,
-            # published the same day) are all the same news
-            key = version_of(title) or f"day:{upd['date']}"
+        if not url.strip():
+            if name not in self.no_page:
+                self.no_page.add(name)
+                self.log(f"Patch notes ({name}): add its official notes page link to watch it.")
+            return
+        upd = page_update(url.strip(), self.fetcher)
+        if not upd:
+            return
+        key = upd["key"]
         with self.lock:
             first = name not in self.seen
             changed = self.seen.get(name) != key
             self.seen[name] = key
             self.latest[name] = upd
         if changed and not first:
-            text = (f"{name}: {upd['headline']}" if upd.get("headline") else
-                    f"{name} update {upd['date']}: {upd['changes']} changes")
+            text = f"{name} update {upd['date']}: {upd['changes']} changes"
             self.on_alert(Alert("UPDATE", LABEL, scroll=segments(name, upd), log_text=f"Patch notes: {text}"))
 
     def poll(self):

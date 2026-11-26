@@ -9,6 +9,8 @@
 **Live scores** in team colors: NFL, NBA, MLB, WNBA, women's college basketball (top 25) and tennis Grand Slams.
 Only games happening today show up. Your **favorite teams** go first with a gold star, and
 **big-moment alerts** flash on the display: kickoff, touchdowns, field goals, runs, close games late, wins.
+Scores, alerts and fantasy run 30 seconds behind live by default (**Delay**), so they don't beat your
+TV or stream; set it to Live or up to 90 s.
 
 ![A full line of scores](docs/images/ticker-line.png)
 
@@ -68,12 +70,11 @@ red, or **DOWN**). Change it under Options → Dashboard corner.
 scrolls by (green when you're winning), and with alerts on, a starter's big play flashes up, like
 `J. ALLEN +6.4`. Type part of a league name to show just that league.
 
-**Game updates (patch notes):** tick **PATCHES** and list up to 3 games. With a game's official
-notes page (WoW Forever comes filled in with Blizzard's hotfix list), new notes cut in with a quick
-summary: the date, how many changes, and the first change in each of the top categories. With no
-page, it watches the news for "<game> patch notes" headlines instead (handy until a page exists, like
-GTA 6 today). Recent notes stay in the cycle for 2 days. `python tools/patchnotes_check.py` shows what
-it finds right now.
+**Game updates (patch notes):** tick **PATCHES** and list up to 3 games. Each game needs its
+official notes page (WoW Forever and GTA 6 come filled in with Blizzard's and Rockstar's), and new
+notes cut in with a quick summary: the date, how many changes, and a few short changes from the top
+categories. Recent notes stay in the cycle for 2 days. `python tools/patchnotes_check.py` shows what
+it finds right now (`--all` lists every change, shortened).
 
 **Messages from a phone:** tick **MESSAGES**. The app makes a private link (Messages section →
 **Copy**). Anything sent to that link flashes the whole display pink and white, then scrolls by with a

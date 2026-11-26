@@ -20,7 +20,7 @@ from .paths import DATA_DIR
 
 API = "https://api.sleeper.app/v1/"
 PLAYERS_FILE = os.path.join(DATA_DIR, "sleeper_players.json")
-POLL_S = 60
+POLL_S = 30
 BIG_PLAY = 3.0                       # alert when a starter gains this many points between polls
 LABEL, ME, THEM = (40, 200, 220), (255, 200, 0), style.WHITE
 UP, DOWN = (0, 220, 80), (255, 30, 30)
@@ -154,9 +154,9 @@ def matchups(username, league_filter="", ttl=30):
         }
 
 
-def segments(username, league_filter=""):
-    """Scrolling line: FANTASY : MY TEAM 87.4 - 92.1 THEM   (one entry per league)."""
-    ms = list(matchups(username, league_filter))
+def segments(ms):
+    """Scrolling line: FANTASY : MY TEAM 87.4 - 92.1 THEM   (one entry per league).
+    ms: list of matchups() results."""
     if not ms:
         return None
     segs = [("FANTASY", LABEL), (" : ", style.GRAY)]
@@ -185,9 +185,10 @@ def fit(name, tail):
 class Watcher(threading.Thread):
     """Polls your matchups and calls on_alert(Alert) when a starter jumps BIG_PLAY+ points."""
 
-    def __init__(self, settings, on_alert, stop_event, log=print, interval=POLL_S):
+    def __init__(self, settings, on_alert, stop_event, log=print, interval=POLL_S, source=None):
         super().__init__(daemon=True)
         self.s, self.on_alert, self.stop, self.log, self.interval = settings, on_alert, stop_event, log, interval
+        self.source = source or (lambda u, lg: list(matchups(u, lg, ttl=self.interval / 2)))
         self.prev = {}
 
     def poll(self):
@@ -195,7 +196,7 @@ class Watcher(threading.Thread):
         if not self.s.sleeper_user.strip() or "FANTASY" not in self.s.leagues or not self.s.alerts:
             return
         try:
-            ms = list(matchups(self.s.sleeper_user, self.s.sleeper_league, ttl=self.interval / 2))
+            ms = self.source(self.s.sleeper_user, self.s.sleeper_league)
         except Exception:
             return                         # offline or Sleeper hiccup; try next poll
         for m in ms:

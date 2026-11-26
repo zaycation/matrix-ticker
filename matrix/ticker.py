@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from . import alerts, favorites, meetings, messages, patches, quakes, render, scores, screens, sleeper, style, weather
+from . import alerts, favorites, lag, meetings, messages, patches, quakes, render, scores, screens, sleeper, style, weather
 from .font import ICON_CHAR
 
 from .paths import RESTORE_FILE
@@ -42,6 +42,7 @@ class Settings:
     favorites: str = ""            # favorite teams, e.g. "Bears, Sparks" (see matrix/favorites.py)
     favorites_only: bool = False   # sports: show only games with a favorite team
     alerts: bool = True            # flash big moments for favorite teams (and fantasy big plays)
+    live_delay: int = 30           # seconds: sports scores, alerts and fantasy run this far behind (TV/stream lag)
     sleeper_user: str = ""         # Sleeper username for FANTASY
     sleeper_league: str = ""       # only leagues whose name contains this ("" = all your leagues)
     calendar_url: str = ""         # private iCal link for MEETINGS (see matrix/meetings.py)
@@ -112,7 +113,9 @@ class ScrollTicker:
         self.counter = counter
         self.timer = timer                    # matrix.timer.Timer: takes over the panel while running
         self.alert_q, self.alert_ready = queue.Queue(), threading.Event()
-        self.games_source = games_source or scores.games
+        delay = lambda: max(0, int(self.s.live_delay or 0))   # noqa: E731
+        self.games_source = lag.Lagged(games_source or scores.games, delay)
+        self.fantasy_source = lag.Lagged(lambda u, lg: list(sleeper.matchups(u, lg)), delay)
         self.show = show or self._send
 
     def _wait(self, seconds):
@@ -141,6 +144,15 @@ class ScrollTicker:
         """Queue a big-moment alert; it cuts in at the next frame (thread-safe)."""
         self.alert_q.put(alert)
         self.alert_ready.set()
+
+    def push_live(self, alert):
+        """Sports and fantasy alerts: queued after the live delay, so they land with the stream."""
+        d = max(0, int(self.s.live_delay or 0))
+        if not d:
+            return self.push_alert(alert)
+        t = threading.Timer(d, lambda: None if self.stop.is_set() else self.push_alert(alert))
+        t.daemon = True
+        t.start()
 
     def _flash_panel(self, colors):
         """Fill the whole panel with each color in turn, as fast as the panel allows."""
@@ -302,7 +314,7 @@ class ScrollTicker:
                     self.log("Fantasy: no Sleeper username set, skipping.")
                 return None
             try:
-                segs = sleeper.segments(self.s.sleeper_user, self.s.sleeper_league)
+                segs = sleeper.segments(self.fantasy_source(self.s.sleeper_user, self.s.sleeper_league))
             except Exception as e:
                 self.log(f"Fantasy: {e}")
                 return None
@@ -375,8 +387,9 @@ class ScrollTicker:
         messages.Watcher(self.s, self.push_alert, self.stop, self.log).start()
         self.patch_watch = patches.Watcher(self.s, self.push_alert, self.stop, self.log)
         self.patch_watch.start()
-        alerts.Watcher(self.s, self.push_alert, self.stop, self.games_source, self.log).start()
-        sleeper.Watcher(self.s, self.push_alert, self.stop, self.log).start()
+        alerts.Watcher(self.s, self.push_live, self.stop, self.games_source.fresh, self.log).start()
+        sleeper.Watcher(self.s, self.push_live, self.stop, self.log,
+                        source=self.fantasy_source.fresh).start()
         meetings.Watcher(self.s, self.push_alert, self.stop, self.log).start()
         while not self.stop.is_set():
             shown_any = False

@@ -182,7 +182,7 @@ def run_scroll(panel, args, leagues):
                         message_topic=args.topic,
                         **({"patch_games": [dict(zip(("name", "url"), (g.split("=", 1) + [""])[:2])) for g in args.game]}
                            if args.game else {}), quake_alerts=args.quake_radius > 0,
-                        quake_radius=args.quake_radius or 50, dashboard_corner=args.corner, favorites=args.favorites, sleeper_user=args.sleeper, sleeper_league=args.sleeper_league, favorites_only=args.only_favorites, alerts=not args.no_alerts,
+                        quake_radius=args.quake_radius or 50, dashboard_corner=args.corner, favorites=args.favorites, sleeper_user=args.sleeper, sleeper_league=args.sleeper_league, favorites_only=args.only_favorites, alerts=not args.no_alerts, live_delay=args.delay,
                         verbose=args.verbose, league_gap=args.league_gap)
     source = (lambda lg: DEMO.get(lg, [])) if args.demo else None
     from matrix.counter import Counter
@@ -270,6 +270,8 @@ def main():
     ap.add_argument("--favorites", default="", help='favorite teams, e.g. "Bears, Sparks" (listed first, starred)')
     ap.add_argument("--only-favorites", action="store_true", help="show only games with a favorite team")
     ap.add_argument("--no-alerts", action="store_true", help="no big-moment alerts for favorite teams")
+    ap.add_argument("--delay", type=int, default=30, metavar="SEC",
+                    help="run sports scores, alerts and fantasy this many seconds behind live (TV/stream lag; 0 = live)")
     ap.add_argument("--cpu-meter", default=Settings.cpu_meter, choices=["load", "peak", "ram"],
                     help="dashboard top meter")
     ap.add_argument("--gpu-meter", default=Settings.gpu_meter, choices=["temp", "load", "vram", "power", "fan"],
