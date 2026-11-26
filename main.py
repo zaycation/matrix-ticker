@@ -30,7 +30,7 @@ import sys
 import time
 
 from matrix import render, scores
-from matrix.ticker import CALENDAR, COUNTER, DASHBOARD, FANTASY, MEETINGS, MESSAGES, NOWPLAYING, WEATHER, ScrollTicker, Settings
+from matrix.ticker import CALENDAR, COUNTER, DASHBOARD, FANTASY, MEETINGS, MESSAGES, NOWPLAYING, PATCHES, WEATHER, ScrollTicker, Settings
 
 TEXT_MAX = 50
 LIVE, FINAL, UPCOMING, INFO = (0, 255, 80), (170, 170, 170), (255, 255, 255), (80, 160, 255)
@@ -179,7 +179,9 @@ def run_scroll(panel, args, leagues):
                         screen_seconds=args.screen_seconds, clock_24h=args.h24,
                         cpu_meter=args.cpu_meter, gpu_meter=args.gpu_meter,
                         keep_awake=not args.allow_sleep, clock_seconds=not args.no_seconds, calendar_url=args.ical,
-                        message_topic=args.topic, quake_alerts=args.quake_radius > 0,
+                        message_topic=args.topic,
+                        **({"patch_games": [dict(zip(("name", "url"), (g.split("=", 1) + [""])[:2])) for g in args.game]}
+                           if args.game else {}), quake_alerts=args.quake_radius > 0,
                         quake_radius=args.quake_radius or 50, dashboard_corner=args.corner, favorites=args.favorites, sleeper_user=args.sleeper, sleeper_league=args.sleeper_league, favorites_only=args.only_favorites, alerts=not args.no_alerts,
                         verbose=args.verbose, league_gap=args.league_gap)
     source = (lambda lg: DEMO.get(lg, [])) if args.demo else None
@@ -245,10 +247,12 @@ def main():
     ap.add_argument("--weather", dest="only", action="append_const", const=WEATHER,
                     help="include the weather forecast (scroll style; needs --location)")
     for flag, item in (("--dashboard", DASHBOARD), ("--calendar", CALENDAR), ("--counter", COUNTER),
-                       ("--nowplaying", NOWPLAYING), ("--fantasy", FANTASY), ("--meetings", MEETINGS), ("--messages", MESSAGES)):
+                       ("--nowplaying", NOWPLAYING), ("--fantasy", FANTASY), ("--meetings", MEETINGS), ("--messages", MESSAGES), ("--patches", PATCHES)):
         ap.add_argument(flag, dest="only", action="append_const", const=item,
                         help=f"include the {item.lower()} screen (scroll style)")
     ap.add_argument("--ical", default="", metavar="URL", help="private iCal link for --meetings")
+    ap.add_argument("--game", action="append", default=[], metavar="NAME[=URL]",
+                    help="patch notes for --patches: a game, optionally =its official notes page (repeatable)")
     ap.add_argument("--topic", default="", help="ntfy topic for --messages (the app's Messages section shows yours)")
     ap.add_argument("--quake-radius", type=int, default=50, help="earthquake alerts within this many miles (0 = off)")
     ap.add_argument("--corner", default="both", choices=["both", "date", "ping"], help="dashboard top-right corner")
@@ -297,7 +301,7 @@ def main():
 
         while True:
             for league in leagues:
-                if league in (WEATHER, NOWPLAYING, DASHBOARD, CALENDAR, COUNTER, FANTASY, MEETINGS, MESSAGES):
+                if league in (WEATHER, NOWPLAYING, DASHBOARD, CALENDAR, COUNTER, FANTASY, MEETINGS, MESSAGES, PATCHES):
                     continue               # these need the full-color scroll style
                 try:
                     games = DEMO.get(league, []) if args.demo else scores.games(league)

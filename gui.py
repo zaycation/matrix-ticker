@@ -22,7 +22,7 @@ import customtkinter as ctk
 from matrix import autostart, messages, nexlinq, power, updates
 from matrix.counter import Counter
 from matrix.timer import Timer, clock
-from matrix.ticker import COUNTER, FANTASY, ITEMS, MEETINGS, MESSAGES, TIMER, ScrollTicker, Settings, restore_layout
+from matrix.ticker import COUNTER, FANTASY, ITEMS, MEETINGS, MESSAGES, PATCHES, TIMER, ScrollTicker, Settings, restore_layout
 from matrix.version import __version__
 
 try:
@@ -97,7 +97,7 @@ class App:
         for key in ("speed", "padding", "brightness", "loop", "location", "units", "weather_mode",
                     "weather_count", "screen_seconds", "clock_24h", "clock_seconds", "cpu_meter", "gpu_meter",
                     "favorites", "favorites_only", "alerts", "sleeper_user", "sleeper_league", "keep_awake", "calendar_url", "meeting_window",
-                    "meeting_alert", "message_topic", "quake_alerts", "quake_radius", "dashboard_corner"):
+                    "meeting_alert", "message_topic", "patch_games", "quake_alerts", "quake_radius", "dashboard_corner"):
             if key in saved:
                 setattr(self.settings, key, saved[key])
         if "leagues" in saved:
@@ -114,7 +114,10 @@ class App:
         root.iconphoto(True, self.icon)
         root.after(300, lambda: root.iconphoto(True, self.icon))   # customtkinter sets its own at ~200 ms
 
-        outer = ctk.CTkFrame(root, fg_color="transparent")
+        # everything sits in a scrollable area, so the window fits short screens (see _fit_window)
+        self.scroll = ctk.CTkScrollableFrame(root, fg_color=BG, corner_radius=0)
+        self.scroll.pack(fill="both", expand=True)
+        outer = self.outer = ctk.CTkFrame(self.scroll, fg_color="transparent")
         outer.pack(padx=16, pady=14)
 
         # header
@@ -244,6 +247,20 @@ class App:
         ctk.CTkLabel(box_n, text="Her iPhone Shortcut sends to this link (setup steps: README → Messages).",
                      text_color=MUTED, font=font(11)).grid(row=3, column=0, columnspan=4, sticky="w", pady=(4, 0))
         box_n.columnconfigure(1, weight=1)
+
+        # game updates (only shown when PATCHES is ticked)
+        self.patches_box = box_p = self._card(left, "Game updates (patch notes)", pack=False)
+        games = (list(self.settings.patch_games) + [{"name": "", "url": ""}] * 3)[:3]
+        self.patch_rows = []
+        for r, g in enumerate(games, start=1):
+            name = self._hint_entry(box_p, "Game", g.get("name", ""), 110, self._patches_changed)
+            url = self._hint_entry(box_p, "Official notes page (blank = watch the news)", g.get("url", ""), 350,
+                                   self._patches_changed)
+            name.grid(row=r, column=0, sticky="w", pady=2)
+            url.grid(row=r, column=1, columnspan=3, sticky="w", padx=(6, 0), pady=2)
+            self.patch_rows.append((name, url))
+        ctk.CTkLabel(box_p, text="New notes cut in with a quick summary; recent ones stay in the cycle for 2 days.",
+                     text_color=MUTED, font=font(11)).grid(row=4, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
         # timer (only shown when TIMER is ticked)
         self.left = left
@@ -387,6 +404,7 @@ class App:
                      font=font(10)).pack(anchor="e", pady=(4, 0))
 
         self._show_counter_box()
+        self._fit_window()
         self._opacity_changed()
         self._check_updates()
         for err in (self.counter.listen(), self.timer.listen()):
@@ -505,7 +523,7 @@ class App:
 
     def _show_counter_box(self):
         """Messages, timer, meetings, fantasy and counter settings only show when their item is ticked."""
-        lefts = [(self.messages_box.card, MESSAGES), (self.timer_box.card, TIMER)]
+        lefts = [(self.messages_box.card, MESSAGES), (self.patches_box.card, PATCHES), (self.timer_box.card, TIMER)]
         wanted = [c for c, item in lefts if self.league_vars[item].get()]
         if [c for c, _ in lefts if c.winfo_manager()] != wanted:
             for c, _ in lefts:
@@ -522,13 +540,28 @@ class App:
         for c in wanted:
             c.pack(fill="x", pady=(8, 0), before=self.small)
 
-    def _hint_entry(self, parent, hint, value, width):
+    def _fit_window(self):
+        """Size the window to its contents, but no taller than the screen; scroll the rest."""
+        self.root.update_idletasks()
+        w, h = self.outer.winfo_reqwidth() + 32, self.outer.winfo_reqheight() + 28
+        room = self.root.winfo_screenheight() - 110          # title bar + taskbar
+        self.scroll.configure(width=w, height=min(h, room))
+        bar = getattr(self.scroll, "_scrollbar", None)
+        if bar is not None:
+            (bar.grid if h > room else bar.grid_remove)()
+
+    def _patches_changed(self):
+        self.settings.patch_games = [{"name": n.get().strip(), "url": u.get().strip()}
+                                     for n, u in self.patch_rows if n.get().strip()]
+        self._schedule_save()
+
+    def _hint_entry(self, parent, hint, value, width, on_change=None):
         e = ctk.CTkEntry(parent, placeholder_text=hint, width=width, height=30, corner_radius=8, fg_color=FIELD,
                          border_width=0, text_color=FG, placeholder_text_color=MUTED, font=font())
         if value:
             e.insert(0, value)
         for ev in ("<KeyRelease>", "<FocusOut>"):
-            e.bind(ev, lambda _e: self._fantasy_changed())
+            e.bind(ev, lambda _e: (on_change or self._fantasy_changed)())
         return e
 
     def _meetings_changed(self):
@@ -559,6 +592,7 @@ class App:
         self.update_text.configure(text=f"Version {version} is available  (you have {__version__})")
         if not self.update_bar.winfo_manager():
             self.update_bar.pack(fill="x", pady=(10, 0), after=self.head)
+            self._fit_window()
             self.log(f"Update available: {version}. Click Download.")
             if self.tray:
                 try:
@@ -669,6 +703,7 @@ class App:
             self.timer.reset()                 # unticking TIMER also cancels a running or paused timer
             self.log("Timer cancelled.")
         self._show_counter_box()
+        self._fit_window()
         self._schedule_save()
 
     def _location_changed(self):
@@ -737,7 +772,7 @@ class App:
                       "sleeper_user": s.sleeper_user, "sleeper_league": s.sleeper_league,
                       "keep_awake": s.keep_awake, "calendar_url": s.calendar_url,
                       "meeting_window": s.meeting_window, "meeting_alert": s.meeting_alert,
-                      "message_topic": s.message_topic,
+                      "message_topic": s.message_topic, "patch_games": s.patch_games,
                       "quake_alerts": s.quake_alerts, "quake_radius": s.quake_radius,
                       "dashboard_corner": s.dashboard_corner}
         with open(CONFIG_FILE, "w") as f:
